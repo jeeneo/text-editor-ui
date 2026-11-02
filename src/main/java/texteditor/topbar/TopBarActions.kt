@@ -85,8 +85,7 @@ fun TopBarActions(
     onShowOverflowMenuChange: (Boolean) -> Unit = {},
     showSearchPanel: Boolean = false,
     onShowSearchPanelChange: (Boolean) -> Unit = {},
-    showReloadDialog: MutableState<Boolean> = remember { mutableStateOf(false) },
-    showSettingsDialog: MutableState<Boolean> = remember { mutableStateOf(false) },
+    onShowSettingsChange: (Boolean) -> Unit = {},
     detectedScope: String? = null,
     languageOverride: String? = null,
     onLanguageSelected: (String?) -> Unit = {},
@@ -199,8 +198,8 @@ fun TopBarActions(
                     ) { viewModel?.toggleWordWrap() },
                     TopBarAction("Read-only mode", Icons.Filled.RemoveRedEye) { },
                     TopBarAction("Code completion", Icons.Outlined.Copyright) { },
-                    TopBarAction("Preferences", Icons.Filled.Settings) {
-                        showSettingsDialog.value = true
+                    TopBarAction("Settings", Icons.Filled.Settings) {
+                        onShowSettingsChange(true)
                         onShowOverflowMenuChange(false)
                     },
                     TopBarAction("Close file", Icons.Outlined.Close) { },

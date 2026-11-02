@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -43,107 +42,23 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import texteditor.FontRegistry
-import java.io.File
 import texteditor.ThemeRegistry as EditorThemeRegistry
 
 @Composable
-fun EditorSettingsDialog(
-    selectedTheme: String,
+fun ThemeChoiceDialog(
+    selected: String,
     onThemeSelected: (String) -> Unit,
-    selectedFont: String,
-    fontOptions: List<FontRegistry.FontOption>,
-    systemFontOptions: List<FontRegistry.FontOption>,
-    onShowSystemFonts: () -> Unit,
-    onFontSelected: (String) -> Unit,
-    onFontImported: (FontRegistry.FontOption) -> Unit,
-    onFontDeleted: (FontRegistry.FontOption) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val showThemePicker = remember { mutableStateOf(false) }
-    val showFontPicker = remember { mutableStateOf(false) }
-    if (showThemePicker.value) {
-        SingleChoiceDialog(
-            title = "Theme",
-            options = EditorThemeRegistry.availableThemes,
-            selected = EditorThemeRegistry.availableThemes.find { it.id == selectedTheme }
-                ?: EditorThemeRegistry.availableThemes.firstOrNull(),
-            label = { it?.displayName ?: "" },
-            onSelect = { onThemeSelected(it?.id ?: "") },
-            onDismiss = { showThemePicker.value = false },
-        )
-    }
-    if (showFontPicker.value) {
-        FontChoiceDialog(
-            fontOptions = fontOptions,
-            systemFontOptions = systemFontOptions,
-            onShowSystemFonts = onShowSystemFonts,
-            selected = selectedFont,
-            onSelect = onFontSelected,
-            onFontImported = onFontImported,
-            onFontDeleted = onFontDeleted,
-            onDismiss = { showFontPicker.value = false },
-        )
-    }
-    val selectedThemeDisplayName =
-        EditorThemeRegistry.availableThemes.find { it.id == selectedTheme }?.displayName
-            ?: selectedTheme
-    val selectedFontDisplayName = fontOptions.find { it.id == selectedFont }?.displayName
-        ?: systemFontOptions.find { it.id == selectedFont }?.displayName ?: File(selectedFont).name
-    val context = LocalContext.current
-    val selectedFontFamily = remember(selectedFont) {
-        FontFamily(FontRegistry.loadTypeface(context, selectedFont))
-    }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Editor settings") }, text = {
-        Column {
-            SettingsClickRow(
-                label = "Theme",
-                value = selectedThemeDisplayName,
-                onClick = { showThemePicker.value = true },
-            )
-            SettingsClickRow(
-                label = "Font",
-                value = selectedFontDisplayName,
-                valueFontFamily = selectedFontFamily,
-                onClick = { showFontPicker.value = true },
-            )
-        }
-    }, confirmButton = {
-        TextButton(onClick = onDismiss) { Text("Done") }
-    })
-}
-
-
-@Composable
-private fun SettingsClickRow(
-    label: String,
-    value: String,
-    valueFontFamily: FontFamily? = null,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-    ) {
-        Row(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                text = " ($value)",
-                fontFamily = valueFontFamily,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-        }
-        Icon(
-            Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
-        )
-    }
+    val themes = EditorThemeRegistry.availableThemes
+    SingleChoiceDialog(
+        title = "Theme",
+        options = themes,
+        selected = themes.find { it.id == selected } ?: themes.firstOrNull(),
+        label = { it?.displayName ?: "" },
+        onSelect = { onThemeSelected(it?.id ?: "") },
+        onDismiss = onDismiss,
+    )
 }
 
 @Composable
@@ -190,7 +105,7 @@ private fun <T> SingleChoiceDialog(
 }
 
 @Composable
-private fun FontChoiceDialog(
+fun FontChoiceDialog(
     fontOptions: List<FontRegistry.FontOption>,
     systemFontOptions: List<FontRegistry.FontOption>,
     onShowSystemFonts: () -> Unit,
