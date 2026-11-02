@@ -2,6 +2,7 @@ package texteditor.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -22,6 +24,8 @@ import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -34,16 +38,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import texteditor.FontRegistry
+import texteditor.PRELOAD_BG_DARK
 import texteditor.SoraEditorViewModel
 import texteditor.ThemeRegistry
 import texteditor.dialogs.FontChoiceDialog
 import texteditor.dialogs.ThemeChoiceDialog
+import ui.PaneDropShadow
 import java.io.File
 
 @Composable
@@ -95,7 +101,8 @@ fun EditorSettingsScreen(
         FontFamily(FontRegistry.loadTypeface(context, viewModel.selectedFont))
     }
     Surface(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(), color = Color(PRELOAD_BG_DARK),
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Surface(
@@ -122,57 +129,95 @@ fun EditorSettingsScreen(
                     )
                 }
             }
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .navigationBarsPadding()
-                    .padding(bottom = 8.dp),
+                    .weight(1f),
             ) {
-                SectionHeader("Appearance")
-                SettingsClickRow(
-                    label = "Theme",
-                    value = themeDisplayName,
-                    onClick = { showThemePicker = true },
-                )
-                SettingsClickRow(
-                    label = "Font",
-                    value = fontDisplayName,
-                    valueFontFamily = fontFamily,
-                    onClick = { showFontPicker = true },
-                )
-                SectionHeader("Editor")
-                SettingsSwitchRow(
-                    label = "Syntax highlighting",
-                    checked = viewModel.syntaxHighlight,
-                    onCheckedChange = { viewModel.toggleSyntaxHighlight() },
-                )
-                SettingsSwitchRow(
-                    label = "Line numbers",
-                    checked = viewModel.lineNumbers,
-                    onCheckedChange = { viewModel.toggleLineNumbers() },
-                )
-                SettingsSwitchRow(
-                    label = "Minimap",
-                    checked = viewModel.miniMap,
-                    onCheckedChange = { viewModel.toggleMinimap() },
-                )
-                SettingsSwitchRow(
-                    label = "Minimap blocks",
-                    checked = viewModel.miniMapBlocks,
-                    enabled = viewModel.miniMap,
-                    onCheckedChange = { viewModel.toggleMinimapBlocks() },
-                )
-                SettingsSwitchRow(
-                    label = "Symbol bar",
-                    checked = viewModel.symbolBar,
-                    onCheckedChange = { viewModel.toggleSymbolBar() },
-                )
-                SettingsSwitchRow(
-                    label = "Invisible characters",
-                    checked = viewModel.invisibleChars,
-                    onCheckedChange = { viewModel.toggleInvisibleChars() },
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp),
+                ) {
+                    SectionHeader("Appearance")
+                    SettingsRow(
+                        label = "Theme",
+                        description = "Placeholder: theme description",
+                        enabled = false,
+                        onClick = { showThemePicker = true },
+                        trailing = { ValueWithChevron(themeDisplayName) },
+                    )
+                    SettingsRow(
+                        label = "Font",
+                        description = "Placeholder: font description",
+                        onClick = { showFontPicker = true },
+                        trailing = { ValueWithChevron(fontDisplayName, fontFamily) },
+                    )
+                    HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
+                    SectionHeader("Editor")
+                    SettingsRow(
+                        label = "Syntax highlighting",
+                        description = "Placeholder: syntax highlighting description",
+                        onClick = { viewModel.toggleSyntaxHighlight() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.syntaxHighlight, onCheckedChange = null
+                            )
+                        },
+                    )
+                    SettingsRow(
+                        label = "Line numbers",
+                        description = "Placeholder: line numbers description",
+                        onClick = { viewModel.toggleLineNumbers() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.lineNumbers, onCheckedChange = null
+                            )
+                        },
+                    )
+                    SettingsRow(
+                        label = "Minimap",
+                        description = "Placeholder: minimap description",
+                        onClick = { viewModel.toggleMinimap() },
+                        trailing = { Switch(checked = viewModel.miniMap, onCheckedChange = null) },
+                    )
+                    SettingsRow(
+                        label = "Minimap blocks",
+                        description = "Placeholder: minimap blocks description",
+                        enabled = viewModel.miniMap,
+                        onClick = { viewModel.toggleMinimapBlocks() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.miniMapBlocks,
+                                onCheckedChange = null,
+                                enabled = viewModel.miniMap
+                            )
+                        },
+                    )
+                    SettingsRow(
+                        label = "Symbol bar",
+                        description = "Placeholder: symbol bar description",
+                        onClick = { viewModel.toggleSymbolBar() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.symbolBar, onCheckedChange = null
+                            )
+                        },
+                    )
+                    SettingsRow(
+                        label = "Invisible characters",
+                        description = "Placeholder: invisible characters description",
+                        onClick = { viewModel.toggleInvisibleChars() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.invisibleChars, onCheckedChange = null
+                            )
+                        },
+                    )
+                }
+                PaneDropShadow()
             }
         }
     }
@@ -180,7 +225,6 @@ fun EditorSettingsScreen(
 
 @Composable
 private fun SectionHeader(title: String) {
-    HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge,
@@ -190,33 +234,37 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun SettingsClickRow(
+private fun SettingsRow(
     label: String,
-    value: String,
-    valueFontFamily: FontFamily? = null,
+    description: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
+    trailing: @Composable () -> Unit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
+    val alpha = if (enabled) 1f else 0.38f
+    ListItem(
+        modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent,
+            headlineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+            supportingColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+        ),
+        headlineContent = { Text(label) },
+        supportingContent = { Text(description) },
+        trailingContent = trailing,
+    )
+}
+
+@Composable
+private fun ValueWithChevron(value: String, fontFamily: FontFamily? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            fontFamily = valueFontFamily,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
+            fontFamily = fontFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.widthIn(max = 140.dp),
         )
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -225,33 +273,6 @@ private fun SettingsClickRow(
             modifier = Modifier
                 .padding(start = 4.dp)
                 .size(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun SettingsSwitchRow(
-    label: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onCheckedChange)
-            .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = { onCheckedChange() },
-            enabled = enabled,
         )
     }
 }

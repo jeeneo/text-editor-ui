@@ -69,6 +69,7 @@ import texteditor.TopBarAction
 import texteditor.dialogs.LanguagePickerDialog
 import ui.theme.AppTheme
 import io.github.rosemoe.sora.widget.CodeEditor
+import ui.PaneDropShadow
 
 @Composable
 fun TopBarActions(
@@ -175,10 +176,13 @@ fun TopBarActions(
                         contentDescription = "",
                     )
                 }
+                val isReadOnly = viewModel?.readOnly == true
                 val flexibleActions = listOf(
                     TopBarAction("File", Icons.AutoMirrored.Outlined.InsertDriveFile) { },
                     TopBarAction(
-                        "Search", Icons.Outlined.Search
+                        "Search",
+                        Icons.Outlined.Search,
+                        enabled = !isReadOnly,
                     ) { onShowSearchPanelChange(!showSearchPanel) },
                     TopBarAction("Preview", Icons.Outlined.Language) {
                         onShowOverflowMenuChange(false)
@@ -196,8 +200,16 @@ fun TopBarActions(
                         Icons.AutoMirrored.Outlined.ShortText,
                         checked = viewModel?.wordWrap,
                     ) { viewModel?.toggleWordWrap() },
-                    TopBarAction("Read-only mode", Icons.Filled.RemoveRedEye) { },
-                    TopBarAction("Code completion", Icons.Outlined.Copyright) { },
+                    TopBarAction(
+                        "Read-only mode",
+                        Icons.Filled.RemoveRedEye,
+                        checked = viewModel?.readOnly,
+                    ) { viewModel?.toggleReadOnly() },
+                    TopBarAction(
+                        "Code completion",
+                        Icons.Outlined.Copyright,
+                        checked = viewModel?.autoCompletion,
+                    ) { viewModel?.toggleAutoCompletion() },
                     TopBarAction("Settings", Icons.Filled.Settings) {
                         onShowSettingsChange(true)
                         onShowOverflowMenuChange(false)
@@ -236,6 +248,7 @@ fun TopBarActions(
                                     trailingIcon = action.checked?.let {
                                         { Checkbox(checked = it, onCheckedChange = null) }
                                     },
+                                    enabled = action.enabled,
                                     onClick = { action.onClick() },
                                 )
                             }

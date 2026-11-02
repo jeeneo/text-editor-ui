@@ -93,6 +93,8 @@ private object PrefKeys {
     const val TEXT_SIZE_PX = "text_size_px"
     const val SELECTED_FONT = "selected_font"
     const val INVISIBLE_CHARS = "invisible_chars"
+    const val READ_ONLY = "read_only"
+    const val AUTO_COMPLETION = "auto_completion"
 }
 
 private object EditorDefaults {
@@ -104,6 +106,8 @@ private object EditorDefaults {
     const val SYMBOL_BAR = true
     const val LINE_NUMBERS = true
     const val INVISIBLE_CHARS = true
+    const val READ_ONLY = false
+    const val AUTO_COMPLETION = true
     const val SELECTED_THEME = "darcula"
     const val SELECTED_FONT = "fonts/CascadiaCode-Regular.ttf"
 }
@@ -180,6 +184,10 @@ class SoraEditorViewModel(
     var systemFontsLoaded: Boolean by mutableStateOf(false)
         private set
     var invisibleChars: Boolean by mutableStateOf(EditorDefaults.INVISIBLE_CHARS)
+        private set
+    var readOnly: Boolean by mutableStateOf(EditorDefaults.READ_ONLY)
+        private set
+    var autoCompletion: Boolean by mutableStateOf(EditorDefaults.AUTO_COMPLETION)
         private set
     var content: Content by mutableStateOf(Content())
         private set
@@ -310,6 +318,9 @@ class SoraEditorViewModel(
         symbolBar = prefs.getBoolean(PrefKeys.SYMBOL_BAR, EditorDefaults.SYMBOL_BAR)
         lineNumbers = prefs.getBoolean(PrefKeys.LINE_NUMBERS, EditorDefaults.LINE_NUMBERS)
         invisibleChars = prefs.getBoolean(PrefKeys.INVISIBLE_CHARS, EditorDefaults.INVISIBLE_CHARS)
+        readOnly = prefs.getBoolean(PrefKeys.READ_ONLY, EditorDefaults.READ_ONLY)
+        autoCompletion =
+            prefs.getBoolean(PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION)
 
         val app = getApplication<Application>()
 
@@ -342,6 +353,8 @@ class SoraEditorViewModel(
             putBoolean(PrefKeys.LINE_NUMBERS, lineNumbers)
             putString(PrefKeys.SELECTED_FONT, selectedFont)
             putBoolean(PrefKeys.INVISIBLE_CHARS, invisibleChars)
+            putBoolean(PrefKeys.READ_ONLY, readOnly)
+            putBoolean(PrefKeys.AUTO_COMPLETION, autoCompletion)
         }
     }
 
@@ -425,6 +438,16 @@ class SoraEditorViewModel(
 
     fun toggleInvisibleChars() {
         invisibleChars = !invisibleChars
+        savePrefs()
+    }
+
+    fun toggleReadOnly() {
+        readOnly = !readOnly
+        savePrefs()
+    }
+
+    fun toggleAutoCompletion() {
+        autoCompletion = !autoCompletion
         savePrefs()
     }
 

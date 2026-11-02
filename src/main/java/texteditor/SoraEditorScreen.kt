@@ -168,7 +168,7 @@ fun TextEditorScreen(
         }
     }
     LaunchedEffect(initialSearchQuery, layoutReady) {
-        if (layoutReady && !initialSearchQuery.isNullOrBlank()) {
+        if (layoutReady && !initialSearchQuery.isNullOrBlank() && !viewModel.readOnly) {
             showSearchPanel = true
         }
     }
@@ -207,6 +207,19 @@ fun TextEditorScreen(
     }
     LaunchedEffect(editorRef, viewModel.lineNumbers) {
         editorRef?.isLineNumberEnabled = viewModel.lineNumbers
+    }
+    LaunchedEffect(editorRef, viewModel.readOnly) {
+        editorRef?.setEditable(!viewModel.readOnly)
+    }
+    LaunchedEffect(editorRef, viewModel.autoCompletion) {
+        editorRef?.getComponent<EditorAutoCompletion>()?.setEnabled(viewModel.autoCompletion)
+    }
+    LaunchedEffect(viewModel.readOnly) {
+        // Search and replace have no place in a read-only document.
+        if (viewModel.readOnly) {
+            showSearchPanel = false
+            editorRef?.searcher?.stopSearch()
+        }
     }
     LaunchedEffect(editorRef, typefaceToLoad) {
         editorRef?.let {
@@ -385,9 +398,10 @@ fun TextEditorScreen(
                                             applyMinimap(
                                                 this, viewModel.miniMap, viewModel.miniMapBlocks
                                             )
-                                            applyInvisibleChars(this, viewModel.invisibleChars)
-                                            @Suppress("UsePropertyAccessSyntax") setText(viewModel.content)
-                                            setEditorLanguage(activeLanguage)
+                                        applyInvisibleChars(this, viewModel.invisibleChars)
+                                        @Suppress("UsePropertyAccessSyntax") setText(viewModel.content)
+                                        setEditorLanguage(activeLanguage)
+                                        setEditable(!viewModel.readOnly)
                                             subscribeEvent(LayoutStateChangeEvent::class.java) { event, _ ->
                                                 if (!event.isLayoutBusy) {
                                                     layoutReady = true
@@ -425,9 +439,10 @@ fun TextEditorScreen(
                                             searcher.replaceOptions =
                                                 EditorSearcher.ReplaceOptions(true)
                                             EditorSpanInteractionHandler(this)
-                                            getComponent<EditorAutoCompletion>().setEnabledAnimation(
-                                                true
-                                            )
+                                        getComponent<EditorAutoCompletion>().apply {
+                                            setEnabledAnimation(true)
+                                            setEnabled(viewModel.autoCompletion)
+                                        }
                                             subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
                                                 canUndo.value = canUndo()
                                                 canRedo.value = canRedo()
@@ -600,7 +615,7 @@ fun TextEditorScreen(
                     }
                 }
                 AnimatedVisibility(
-                    visible = (viewModel.symbolBar && layoutReady),
+                    visible = (viewModel.symbolBar && layoutReady && !viewModel.readOnly),
                     enter = expandVertically(
                         animationSpec = tween(durationMillis = 220),
                         expandFrom = Alignment.Bottom,
@@ -617,7 +632,7 @@ fun TextEditorScreen(
                     )
                 }
                 AnimatedVisibility(
-                    visible = (showSearchPanel && layoutReady),
+                    visible = (showSearchPanel && layoutReady && !viewModel.readOnly),
                     enter = expandVertically(
                         animationSpec = tween(durationMillis = 220),
                         expandFrom = Alignment.Top,

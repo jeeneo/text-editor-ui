@@ -268,6 +268,7 @@ private fun SymbolCell(
 }
 
 private fun CodeEditor.insertSymbol(insert: String) {
+    if (!isEditable) return
     val cursor = this.cursor
     text.replace(
         cursor.leftLine,
