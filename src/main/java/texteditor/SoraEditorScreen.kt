@@ -297,7 +297,7 @@ fun TextEditorScreen(
         when {
             viewModel.isNewFile -> append("New file")
             viewModel.openedName != null -> append(viewModel.openedName)
-            else -> append(displayPath?.fileName?.toString() ?: "")
+            else -> append(displayPath?.let(::fileNameOf) ?: "")
         }
     }
     previewText?.let { markdown ->
@@ -306,9 +306,9 @@ fun TextEditorScreen(
             title = if (viewModel.isNewFile) {
                 "New file"
             } else {
-                viewModel.openedName ?: displayPath?.fileName?.toString() ?: "Preview"
+                viewModel.openedName ?: displayPath?.let(::fileNameOf) ?: "Preview"
             },
-            baseUrl = displayPath?.parent?.toUri()?.toString(),
+            baseUrl = displayPath?.let(::parentOf)?.let { "file://$it/" },
             onDismiss = { previewText = null },
         )
     }
