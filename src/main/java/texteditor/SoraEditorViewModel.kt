@@ -32,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.io.IOException
 import kotlin.time.Duration.Companion.milliseconds
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as EditorThemeRegistry
@@ -142,6 +143,10 @@ class SoraEditorViewModel(
         private set
     var openedName: String? by mutableStateOf(null)
         private set
+
+    /** Charset name detected for the open document, e.g. `UTF-8`. */
+    var encoding: String by mutableStateOf(Charsets.UTF_8.name())
+        private set
     var grammarsReady: Boolean by mutableStateOf(EditorLanguages.isInitialized)
         private set
     var grammarsSettled: Boolean by mutableStateOf(EditorLanguages.isInitialized)
@@ -237,6 +242,7 @@ class SoraEditorViewModel(
             isNewFile = true
             isModified = false
             content = Content()
+            encoding = Charsets.UTF_8.name()
             languagesLoaded = true
             loadState = LoadState.Success
             grammarsLoaded()
@@ -470,8 +476,11 @@ class SoraEditorViewModel(
             try {
                 // Read through the host so a root-only file is opened by the
                 // privileged process instead of the app's uid.
-                val builtContent = host.openRead(path).use { stream ->
-                    ContentIO.createFrom(stream)
+                val (builtContent, detectedEncoding) = host.openRead(path).use { stream ->
+                    val buffered =
+                        BufferedInputStream(stream, FileEncodingDetector.SAMPLE_SIZE + 1)
+                    val detected = FileEncodingDetector.detect(buffered)
+                    ContentIO.createFrom(buffered.readerFor(detected)) to detected
                 }
                 if (syntaxHighlight) {
                     val app = getApplication<Application>()
@@ -489,6 +498,7 @@ class SoraEditorViewModel(
                 }
                 withContext(Dispatchers.Main) {
                     content = builtContent
+                    encoding = detectedEncoding.displayName
                     loadState = LoadState.Success
                 }
             } catch (e: OutOfMemoryError) {

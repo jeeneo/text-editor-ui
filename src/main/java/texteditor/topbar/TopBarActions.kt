@@ -73,6 +73,9 @@ import io.github.rosemoe.sora.widget.CodeEditor
 @Composable
 fun TopBarActions(
     title: String = "",
+    cursorLine: Int = 1,
+    cursorColumn: Int = 1,
+    lineCount: Int = 0,
     editorRef: CodeEditor? = null,
     viewModel: SoraEditorViewModel? = null,
     saveButtonState: MutableState<SaveButtonState> = remember { mutableStateOf(SaveButtonState.IDLE) },
@@ -99,6 +102,13 @@ fun TopBarActions(
             onSelect = onLanguageSelected,
             onDismiss = { showLanguagePicker = false },
         )
+    }
+
+    val encoding = viewModel?.encoding ?: "???"
+    val statusText = if (lineCount > 0) {
+        "$cursorLine:$cursorColumn / $lineCount  $encoding"
+    } else {
+        encoding
     }
 
     Surface(
@@ -290,7 +300,7 @@ fun TopBarActions(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "1:1 UTF-8",
+                            text = statusText,
                             style = MaterialTheme.typography.bodySmall,
                             color = LocalContentColor.current.copy(alpha = 0.7f),
                             maxLines = 1,

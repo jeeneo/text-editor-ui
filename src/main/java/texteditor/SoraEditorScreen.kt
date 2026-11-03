@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.event.LayoutStateChangeEvent
 import io.github.rosemoe.sora.event.ScrollEvent
+import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.graphics.inlayHint.ColorInlayHintRenderer
 import io.github.rosemoe.sora.graphics.inlayHint.TextInlayHintRenderer
 import io.github.rosemoe.sora.lang.styling.color.ConstColor
@@ -107,6 +109,9 @@ fun TextEditorScreen(
     val canUndo = remember { mutableStateOf(false) }
     val canRedo = remember { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var cursorLine by remember { mutableIntStateOf(1) }
+    var cursorColumn by remember { mutableIntStateOf(1) }
+    var lineCount by remember { mutableIntStateOf(0) }
     val displayPath = viewModel.savedPath
     val typefaceToLoad = remember(viewModel.selectedFont) {
         FontRegistry.loadTypeface(context, viewModel.selectedFont)
@@ -254,6 +259,25 @@ fun TextEditorScreen(
             viewModel.saveTextSize(editor.textSizePx)
         }
     }
+    DisposableEffect(editorRef) {
+        val editor = editorRef ?: return@DisposableEffect onDispose {}
+        fun refreshPosition() {
+            val caret = editor.cursor
+            // The editor counts lines and columns from zero; an editor shows them from one.
+            cursorLine = caret.leftLine + 1
+            cursorColumn = caret.leftColumn + 1
+            lineCount = editor.text.lineCount
+        }
+        refreshPosition()
+        val selectionReceipt =
+            editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ -> refreshPosition() }
+        val contentReceipt =
+            editor.subscribeEvent(ContentChangeEvent::class.java) { _, _ -> refreshPosition() }
+        onDispose {
+            selectionReceipt.unsubscribe()
+            contentReceipt.unsubscribe()
+        }
+    }
     if (showUnsavedDialog.value) {
         AlertDialog(
             onDismissRequest = { showUnsavedDialog.value = false },
@@ -329,6 +353,9 @@ fun TextEditorScreen(
             topBar = {
                 TopBarActions(
                     title = title,
+                    cursorLine = cursorLine,
+                    cursorColumn = cursorColumn,
+                    lineCount = lineCount,
                     editorRef = editorRef,
                     viewModel = viewModel,
                     saveButtonState = saveButtonState,
