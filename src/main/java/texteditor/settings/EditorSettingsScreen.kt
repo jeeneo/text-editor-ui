@@ -49,7 +49,7 @@ import texteditor.SoraEditorViewModel
 import texteditor.ThemeRegistry
 import texteditor.dialogs.FontChoiceDialog
 import texteditor.dialogs.ThemeChoiceDialog
-import ui.PaneDropShadow
+import ui.PaneShadow
 import java.io.File
 
 @Composable
@@ -217,7 +217,7 @@ fun EditorSettingsScreen(
                         },
                     )
                 }
-                PaneDropShadow()
+                PaneShadow(false)
             }
         }
     }

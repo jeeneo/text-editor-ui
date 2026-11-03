@@ -69,7 +69,6 @@ import texteditor.TopBarAction
 import texteditor.dialogs.LanguagePickerDialog
 import ui.theme.AppTheme
 import io.github.rosemoe.sora.widget.CodeEditor
-import ui.PaneDropShadow
 
 @Composable
 fun TopBarActions(

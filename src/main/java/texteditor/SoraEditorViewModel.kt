@@ -33,7 +33,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
-import java8.nio.file.Path
 import kotlin.time.Duration.Companion.milliseconds
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as EditorThemeRegistry
 
@@ -132,12 +131,12 @@ class SoraEditorViewModel(
     private var pendingScrollX: Int = 0
     private var pendingScrollY: Int = 0
     private var openStartedAt = 0L
-    private var newFileDirectory: Path? = null
+    private var newFileDirectory: String? = null
     private var isSaving = false
 
     var loadState: LoadState by mutableStateOf(LoadState.Loading)
         private set
-    var savedPath: Path? by mutableStateOf(null)
+    var savedPath: String? by mutableStateOf(null)
         private set
     var isNewFile: Boolean by mutableStateOf(false)
         private set
@@ -193,7 +192,7 @@ class SoraEditorViewModel(
         private set
 
     /** Opens [path] as the document to edit; the app owns creating and locating files. */
-    fun open(path: Path, name: String) {
+    fun open(path: String, name: String) {
         viewModelScope.launch {
             if (savedPath != path) languageOverride = null
             newFileDirectory = null
@@ -203,7 +202,7 @@ class SoraEditorViewModel(
             openStartedAt = SystemClock.elapsedRealtime()
             Log.d(
                 TAG,
-                "open ${path.fileName}: grammar index warm=${EditorLanguages.isInitialized}" +
+                "open ${fileNameOf(path)}: grammar index warm=${EditorLanguages.isInitialized}" +
                         " theme warm=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
             )
             val app = getApplication<Application>()
@@ -221,7 +220,7 @@ class SoraEditorViewModel(
     }
 
     /** Opens an empty buffer that is saved into [directory] once the user edits and saves it. */
-    fun openNew(directory: Path) {
+    fun openNew(directory: String) {
         viewModelScope.launch {
             val app = getApplication<Application>()
             if (!prefsLoaded) {
@@ -456,7 +455,7 @@ class SoraEditorViewModel(
         savePrefs()
     }
 
-    fun load(path: Path) {
+    fun load(path: String) {
         // Reloading rebuilds the editor, so the new document has to be tokenized again.
         languagesLoaded = false
         loadState = LoadState.Loading
@@ -466,7 +465,7 @@ class SoraEditorViewModel(
         }
     }
 
-    private fun doLoad(path: Path) {
+    private fun doLoad(path: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 // Read through the host so a root-only file is opened by the
@@ -484,7 +483,7 @@ class SoraEditorViewModel(
                     if (added) EditorLanguages.rebuildGrammar(scope)
                     Log.d(
                         TAG,
-                        "load ${path.fileName}: scope=$scope preloaded=$preloaded" +
+                        "load ${fileNameOf(path)}: scope=$scope preloaded=$preloaded" +
                                 " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
                     )
                 }
@@ -552,7 +551,7 @@ class SoraEditorViewModel(
                 }
                 if (path == null) {
                     savedPath = target
-                    openedName = target.fileName.toString()
+                    openedName = fileNameOf(target)
                     newFileDirectory = null
                     isNewFile = false
                 }
