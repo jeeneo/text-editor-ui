@@ -33,11 +33,4 @@ sealed interface DialogRequest {
         val wordCount: Int,
         val lineCount: Int,
     ) : DialogRequest
-
-    /** Shows [markdown] as rendered HTML, resolved against [baseUrl]. */
-    data class Preview(
-        val markdown: String,
-        val title: String,
-        val baseUrl: String?,
-    ) : DialogRequest
 }

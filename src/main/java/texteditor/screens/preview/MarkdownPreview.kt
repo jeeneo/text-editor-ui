@@ -1,9 +1,10 @@
-package texteditor.dialogs.preview
+package texteditor.screens.preview
 
 import android.annotation.SuppressLint
 import android.content.Context
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,51 +23,62 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import org.json.JSONObject
+import texteditor.PRELOAD_BG_DARK
+import ui.PaneShadow
+import ui.SimpleShadow
+
+data class PreviewState(
+    val markdown: String,
+    val title: String,
+    val baseUrl: String?,
+)
 
 @Composable
-fun MarkdownPreviewDialog(
-    markdown: String,
-    title: String,
-    baseUrl: String? = null,
-    onDismiss: () -> Unit,
+fun MarkdownPreviewScreen(
+    state: PreviewState,
+    onNavigateUp: () -> Unit,
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color(PRELOAD_BG_DARK),
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
                 Row(
                     modifier = Modifier
                         .statusBarsPadding()
                         .fillMaxWidth()
                         .height(56.dp)
-                        .padding(start = 16.dp, end = 4.dp),
+                        .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    IconButton(onClick = onNavigateUp) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                     Text(
-                        text = title,
+                        text = state.title,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp),
                     )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close preview")
-                    }
                 }
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
                 AndroidView(
                     factory = { context ->
-                        createPreviewWebView(context, markdown, title, baseUrl)
+                        createPreviewWebView(context, state.markdown, state.title, state.baseUrl)
                     },
                     modifier = Modifier
                         .fillMaxSize()
@@ -76,6 +88,7 @@ fun MarkdownPreviewDialog(
                         webView.destroy()
                     },
                 )
+                SimpleShadow()
             }
         }
     }

@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import texteditor.dialogs.data.DialogController
 import texteditor.dialogs.data.DialogRequest
+import texteditor.screens.preview.PreviewState
 import java.io.BufferedInputStream
 import java.io.IOException
 import java.nio.charset.Charset
@@ -141,6 +142,10 @@ class SoraEditorViewModel(
     var activeDocumentId: Long by mutableStateOf(0L)
         private set
     val dialogs = DialogController()
+
+    /** The preview screen, when one is open; kept here so it survives configuration changes. */
+    var preview: PreviewState? by mutableStateOf(null)
+        private set
 
     var loadState: LoadState by mutableStateOf(LoadState.Loading)
         private set
@@ -357,13 +362,15 @@ class SoraEditorViewModel(
 
     fun openPreview(markdown: String) {
         val session = activeSession ?: return
-        dialogs.show(
-            DialogRequest.Preview(
-                markdown = markdown,
-                title = displayNameOf(session),
-                baseUrl = session.path?.let(::parentOf)?.let { "file://$it/" },
-            )
+        preview = PreviewState(
+            markdown = markdown,
+            title = displayNameOf(session),
+            baseUrl = session.path?.let(::parentOf)?.let { "file://$it/" },
         )
+    }
+
+    fun closePreview() {
+        preview = null
     }
 
     private fun displayNameOf(session: DocumentSession): String =

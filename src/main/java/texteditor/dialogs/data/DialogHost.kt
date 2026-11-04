@@ -10,7 +10,6 @@ import texteditor.dialogs.close.UnsavedChangesDialog
 import texteditor.dialogs.info.FileInfoDialog
 import texteditor.dialogs.jump.JumpToLineDialog
 import texteditor.dialogs.language.LanguagePickerDialog
-import texteditor.dialogs.preview.MarkdownPreviewDialog
 import texteditor.dialogs.reload.ReloadFileDialog
 
 @Composable
@@ -92,13 +91,6 @@ fun DialogHost(
         is DialogRequest.JumpToLine -> JumpToLineDialog(
             request = request,
             onJump = onJumpToLine,
-            onDismiss = controller::dismissTop,
-        )
-
-        is DialogRequest.Preview -> MarkdownPreviewDialog(
-            markdown = request.markdown,
-            title = request.title,
-            baseUrl = request.baseUrl,
             onDismiss = controller::dismissTop,
         )
     }

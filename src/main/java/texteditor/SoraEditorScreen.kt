@@ -82,8 +82,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import texteditor.bottombar.CustomSearchBar
 import texteditor.bottombar.SymbolInputBar
 import texteditor.dialogs.data.DialogHost
+import texteditor.screens.preview.MarkdownPreviewScreen
+import texteditor.screens.preview.PreviewState
 import texteditor.drawer.EditorDrawerSheet
-import texteditor.settings.EditorSettingsScreen
+import texteditor.screens.settings.EditorSettingsScreen
 import texteditor.topbar.TopBarActions
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -110,6 +112,8 @@ fun TextEditorScreen(
     val canUndo = remember { mutableStateOf(false) }
     val canRedo = remember { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    // Held while the preview slides out, so it still has contents to draw on the way.
+    var shownPreview by remember { mutableStateOf<PreviewState?>(null) }
     var cursorLine by remember { mutableIntStateOf(1) }
     var cursorColumn by remember { mutableIntStateOf(1) }
     var lineCount by remember { mutableIntStateOf(0) }
@@ -228,7 +232,8 @@ fun TextEditorScreen(
     LaunchedEffect(viewModel.activeDocumentId) {
         if (shownDocumentId != viewModel.activeDocumentId) {
             shownDocumentId = viewModel.activeDocumentId
-            // A search belongs to the document it was opened in.
+            // A search or a preview belongs to the document it was opened in.
+            viewModel.closePreview()
             showSearchPanel = false
             searchQuery = null
             editorRef?.searcher?.stopSearch()
@@ -307,11 +312,15 @@ fun TextEditorScreen(
             it.invalidate()
         }
     }
-    LaunchedEffect(showSettings) {
-        if (showSettings) editorRef?.hideSoftInput()
+    LaunchedEffect(viewModel.preview) {
+        if (viewModel.preview != null) shownPreview = viewModel.preview
+    }
+    LaunchedEffect(showSettings, viewModel.preview) {
+        if (showSettings || viewModel.preview != null) editorRef?.hideSoftInput()
     }
     BackHandler(enabled = !showSettings) {
         when {
+            viewModel.preview != null -> viewModel.closePreview()
             !drawerState.isClosed -> scope.launch { drawerState.close() }
             showSearchPanel -> {
                 showSearchPanel = false
@@ -807,6 +816,25 @@ fun TextEditorScreen(
                 viewModel = viewModel,
                 onNavigateUp = { showSettings = false },
             )
+        }
+
+        AnimatedVisibility(
+            visible = viewModel.preview != null,
+            enter = slideInHorizontally(
+                animationSpec = tween(durationMillis = 220),
+                initialOffsetX = { it },
+            ),
+            exit = slideOutHorizontally(
+                animationSpec = tween(durationMillis = 220),
+                targetOffsetX = { it },
+            ),
+        ) {
+            shownPreview?.let { preview ->
+                MarkdownPreviewScreen(
+                    state = preview,
+                    onNavigateUp = viewModel::closePreview,
+                )
+            }
         }
     }
 }

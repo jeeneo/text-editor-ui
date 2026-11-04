@@ -1,4 +1,4 @@
-package texteditor.settings
+package texteditor.screens.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -44,6 +44,7 @@ import texteditor.PRELOAD_BG_DARK
 import texteditor.SoraEditorViewModel
 import texteditor.ThemeRegistry
 import ui.PaneShadow
+import ui.SimpleShadow
 import java.io.File
 
 @Composable
@@ -180,7 +181,7 @@ fun EditorSettingsScreen(
                         },
                     )
                 }
-                PaneShadow(false)
+                SimpleShadow()
             }
         }
     }
