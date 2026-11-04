@@ -1,5 +1,8 @@
 package texteditor.topbar
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -66,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -230,6 +234,7 @@ fun TopBarActions(
                         )
                     }
                 }
+                val context = LocalContext.current
                 IconButton(onClick = {
                     editMenuExpanded = true
                 }) {
@@ -250,7 +255,20 @@ fun TopBarActions(
                                 )
                             },
                             text = { Text("Copy line", color = contentColor.copy(alpha = 0.8f)) },
-                            onClick = { })
+                            onClick = copyLine@{
+                                editMenuExpanded = false
+                                val editor = editorRef ?: return@copyLine
+                                val line = editor.cursor.leftLine
+                                val clipboard =
+                                    context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                        ?: return@copyLine
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        "Line ${line + 1}",
+                                        editor.text.getLineString(line),
+                                    )
+                                )
+                            })
                         DropdownMenuItem(
                             leadingIcon = {
                                 Icon(
@@ -260,7 +278,21 @@ fun TopBarActions(
                                 )
                             },
                             text = { Text("Cut line", color = contentColor.copy(alpha = 0.8f)) },
-                            onClick = { })
+                            onClick = cutLine@{
+                                editMenuExpanded = false
+                                val editor = editorRef ?: return@cutLine
+                                val clipboard =
+                                    context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                        ?: return@cutLine
+                                val line = editor.cursor.leftLine
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        "Line ${line + 1}",
+                                        editor.text.getLineString(line),
+                                    )
+                                )
+                                editor.deleteLine(line)
+                            })
                         DropdownMenuItem(
                             leadingIcon = {
                                 Icon(
@@ -270,7 +302,11 @@ fun TopBarActions(
                                 )
                             },
                             text = { Text("Delete line", color = contentColor.copy(alpha = 0.8f)) },
-                            onClick = { })
+                            onClick = deleteLine@{
+                                editMenuExpanded = false
+                                val editor = editorRef ?: return@deleteLine
+                                editor.deleteLine(editor.cursor.leftLine)
+                            })
                         DropdownMenuItem(
                             leadingIcon = {
                                 Icon(
@@ -280,82 +316,92 @@ fun TopBarActions(
                                 )
                             },
                             text = { Text("Clear line", color = contentColor.copy(alpha = 0.8f)) },
-                            onClick = { })
-                        DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.ContentPaste,
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
-                            text = {
-                                Text(
-                                    "Replace line (clipboard)",
-                                    color = contentColor.copy(alpha = 0.8f)
-                                )
-                            },
-                            onClick = { })
-                        DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.TextIncrease,
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
-                            text = {
-                                Text(
-                                    "Duplicate line",
-                                    color = contentColor.copy(alpha = 0.8f)
-                                )
-                            },
-                            onClick = { })
-                        DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.text_icon_uppercase),
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
-                            text = {
-                                Text(
-                                    "Convert to UPPERCASE",
-                                    color = contentColor.copy(alpha = 0.8f)
-                                )
-                            },
-                            onClick = { })
-                        DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.text_icon_lowercase),
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
-                            text = {
-                                Text(
-                                    "convert to lowercase",
-                                    color = contentColor.copy(alpha = 0.8f)
-                                )
-                            },
-                            onClick = { })
-                        DropdownMenuItem(
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.text_icon_altercase),
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
-                            text = {
-                                Text(
-                                    "Convert to aLtErNaTiNg case",
-                                    color = contentColor.copy(alpha = 0.8f)
-                                )
-                            },
-                            onClick = { })
+                            onClick = clearLine@{
+                                editMenuExpanded = false
+                                val editor = editorRef ?: return@clearLine
+                                editor.clearLine(editor.cursor.leftLine)
+                            })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.ContentPaste,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Replace line (clipboard)",
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = replaceLine@{
+                            editMenuExpanded = false
+                            val editor = editorRef ?: return@replaceLine
+                            val clipboard =
+                                context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                    ?: return@replaceLine
+                            val clip = clipboard.primaryClip
+                            if (clip == null || clip.itemCount == 0) return@replaceLine
+                            val replacement = clip.getItemAt(0).coerceToText(context).toString()
+                                .removeSuffix("\r\n").removeSuffix("\n")
+                            editor.replaceLine(editor.cursor.leftLine, replacement)
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.TextIncrease,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Duplicate line", color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = duplicateLine@{
+                            editMenuExpanded = false
+                            val editor = editorRef ?: return@duplicateLine
+                            editor.duplicateLine(editor.cursor.leftLine)
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.text_icon_uppercase),
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Convert to UPPERCASE", color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = uppercase@{
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.uppercase() }
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.text_icon_lowercase),
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "convert to lowercase", color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = lowercase@{
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.lowercase() }
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.text_icon_altercase),
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Convert to aLtErNaTiNg case",
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = alternating@{
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.toAlternatingCase() }
+                        })
                     }
                 }
                 val isReadOnly = viewModel?.readOnly == true
@@ -594,4 +640,70 @@ fun TsPreview() {
             }
         }
     }
+}
+
+// small funs
+private fun CodeEditor.convertCase(transform: (String) -> String) {
+    val content = text
+    val cursor = cursor
+    val hasSelection = cursor.left != cursor.right
+    val start = if (hasSelection) {
+        minOf(cursor.left, cursor.right)
+    } else {
+        content.getCharIndex(cursor.leftLine, 0)
+    }
+    val end = if (hasSelection) {
+        maxOf(cursor.left, cursor.right)
+    } else {
+        start + content.getLineString(cursor.leftLine).length
+    }
+    if (start >= end) return
+    content.replace(start, end, transform(content.subSequence(start, end).toString()))
+}
+
+private fun String.toAlternatingCase(): String {
+    val builder = StringBuilder(length)
+    var upper = false
+    for (char in this) {
+        builder.append(
+            when {
+                !char.isLetter() -> char
+                upper -> char.uppercaseChar()
+                else -> char.lowercaseChar()
+            }
+        )
+        if (char.isLetter()) upper = !upper
+    }
+    return builder.toString()
+}
+
+private fun CodeEditor.replaceLine(line: Int, replacement: String) {
+    val content = text
+    val start = content.getCharIndex(line, 0)
+    content.replace(start, start + content.getLineString(line).length, replacement)
+}
+
+private fun CodeEditor.clearLine(line: Int) {
+    val content = text
+    val start = content.getCharIndex(line, 0)
+    content.replace(start, start + content.getLineString(line).length, "")
+}
+
+private fun CodeEditor.duplicateLine(line: Int) {
+    val content = text
+    val lineText = content.getLineString(line)
+    val end = content.getCharIndex(line, 0) + lineText.length
+    content.replace(end, end, "\n$lineText")
+}
+
+private fun CodeEditor.deleteLine(line: Int) {
+    val content = text
+    val hasNext = line + 1 < content.lineCount
+    val start = when {
+        hasNext -> content.getCharIndex(line, 0)
+        line > 0 -> content.getCharIndex(line - 1, 0) + content.getLineString(line - 1).length
+        else -> 0
+    }
+    val end = if (hasNext) content.getCharIndex(line + 1, 0) else content.length
+    content.replace(start, end, "")
 }
