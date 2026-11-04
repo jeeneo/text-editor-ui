@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -14,6 +15,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,15 +26,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -79,7 +82,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import texteditor.bottombar.CustomSearchBar
 import texteditor.bottombar.SymbolInputBar
-import texteditor.preview.MarkdownPreviewDialog
+import texteditor.dialogs.data.DialogHost
+import texteditor.drawer.EditorDrawerSheet
 import texteditor.settings.EditorSettingsScreen
 import texteditor.topbar.TopBarActions
 import kotlin.time.Duration.Companion.milliseconds
@@ -96,6 +100,7 @@ val PRELOAD_BG_DARK = "#2B2B2B".toColorInt() // change when themed light
 @Composable
 fun TextEditorScreen(
     onNavigateUp: () -> Unit,
+    onMinimize: () -> Unit = {},
     viewModel: SoraEditorViewModel = viewModel(),
     initialSearchQuery: String? = null,
 ) {
@@ -103,15 +108,15 @@ fun TextEditorScreen(
     var editorRef by remember { mutableStateOf<CodeEditor?>(null) }
     var showSearchPanel by rememberSaveable { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
-    var previewText by remember { mutableStateOf<String?>(null) }
-    val showUnsavedDialog = remember { mutableStateOf(false) }
-    val showReloadDialog = remember { mutableStateOf(false) }
     val canUndo = remember { mutableStateOf(false) }
     val canRedo = remember { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var cursorLine by remember { mutableIntStateOf(1) }
     var cursorColumn by remember { mutableIntStateOf(1) }
     var lineCount by remember { mutableIntStateOf(0) }
+    var searchQuery by remember { mutableStateOf(initialSearchQuery) }
+    var shownDocumentId by remember { mutableStateOf(viewModel.activeDocumentId) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val displayPath = viewModel.savedPath
     val typefaceToLoad = remember(viewModel.selectedFont) {
         FontRegistry.loadTypeface(context, viewModel.selectedFont)
@@ -154,6 +159,42 @@ fun TextEditorScreen(
         )
     }
 
+    /** Saves [id], which may be a document that is only kept in the drawer right now. */
+    fun saveDocument(id: Long, onSaved: () -> Unit) {
+        viewModel.save(
+            getText = { editorRef?.text?.toString() ?: viewModel.content.toString() },
+            onSuccess = {
+                saveButtonState.value = SaveButtonState.SAVED
+                onSaved()
+            },
+            onError = { message ->
+                saveButtonState.value = SaveButtonState.ERROR
+                scope.launch {
+                    snackbarHostState.showSnackbar("Couldn't save: $message")
+                }
+            },
+            id = id,
+        )
+    }
+
+    fun switchToDocument(id: Long) {
+        if (id == viewModel.activeDocumentId) return
+        // The editor is about to be handed to another document, so keep where this one stood.
+        editorRef?.let { viewModel.saveCursorState(it) }
+        viewModel.activate(id)
+    }
+
+    /** Closes [id], and leaves the editor when that was its last document. */
+    fun closeDocument(id: Long) {
+        if (viewModel.requestClose(id)) onNavigateUp()
+    }
+
+    fun minimize() {
+        editorRef?.let { viewModel.saveCursorState(it) }
+        scope.launch { drawerState.close() }
+        onMinimize()
+    }
+
     var layoutReady by remember { mutableStateOf(false) }
     val detectedScope = remember(viewModel.openedName, viewModel.grammarsReady) {
         EditorLanguages.scopeFor(viewModel.openedName)
@@ -172,8 +213,20 @@ fun TextEditorScreen(
             null
         }
     }
-    LaunchedEffect(initialSearchQuery, layoutReady) {
-        if (layoutReady && !initialSearchQuery.isNullOrBlank() && !viewModel.readOnly) {
+    LaunchedEffect(viewModel.activeDocumentId) {
+        if (shownDocumentId != viewModel.activeDocumentId) {
+            shownDocumentId = viewModel.activeDocumentId
+            // A search belongs to the document it was opened in.
+            showSearchPanel = false
+            searchQuery = null
+            editorRef?.searcher?.stopSearch()
+        }
+    }
+    LaunchedEffect(initialSearchQuery) {
+        if (initialSearchQuery != null) searchQuery = initialSearchQuery
+    }
+    LaunchedEffect(searchQuery, layoutReady) {
+        if (layoutReady && !searchQuery.isNullOrBlank() && !viewModel.readOnly) {
             showSearchPanel = true
         }
     }
@@ -236,20 +289,19 @@ fun TextEditorScreen(
     LaunchedEffect(showSettings) {
         if (showSettings) editorRef?.hideSoftInput()
     }
-    BackHandler(enabled = !showSettings && (showSearchPanel || viewModel.isModified)) {
+    BackHandler(enabled = !showSettings) {
         when {
+            !drawerState.isClosed -> scope.launch { drawerState.close() }
             showSearchPanel -> {
                 showSearchPanel = false
                 editorRef?.searcher?.stopSearch()
             }
 
-            viewModel.isModified -> {
-                showUnsavedDialog.value = true
-            }
+            else -> closeDocument(viewModel.activeDocumentId)
         }
     }
     DisposableEffect(editorRef) {
-        val editor = editorRef ?: return@DisposableEffect onDispose {}
+        val editor = editorRef ?: return@DisposableEffect onDispose { }
         if (viewModel.textSizePx > 0f) editor.setTextSizePx(viewModel.textSizePx)
         val receipt = editor.subscribeEvent(ScrollEvent::class.java) { _, _ ->
             viewModel.saveTextSize(editor.textSizePx)
@@ -260,10 +312,9 @@ fun TextEditorScreen(
         }
     }
     DisposableEffect(editorRef) {
-        val editor = editorRef ?: return@DisposableEffect onDispose {}
+        val editor = editorRef ?: return@DisposableEffect onDispose { }
         fun refreshPosition() {
             val caret = editor.cursor
-            // The editor counts lines and columns from zero; an editor shows them from one.
             cursorLine = caret.leftLine + 1
             cursorColumn = caret.leftColumn + 1
             lineCount = editor.text.lineCount
@@ -278,43 +329,16 @@ fun TextEditorScreen(
             contentReceipt.unsubscribe()
         }
     }
-    if (showUnsavedDialog.value) {
-        AlertDialog(
-            onDismissRequest = { showUnsavedDialog.value = false },
-            title = { Text("Discard changes?") },
-            text = { Text("You have unsaved changes. Discard and close?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showUnsavedDialog.value = false
-                    onNavigateUp()
-                }) {
-                    Text("Discard")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnsavedDialog.value = false }) {
-                    Text("Keep editing")
-                }
-            },
-        )
-    }
-
-    if (showReloadDialog.value) {
-        AlertDialog(
-            onDismissRequest = { showReloadDialog.value = false },
-            title = { Text("Reload file?") },
-            text = { Text("Unsaved changes will be lost.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showReloadDialog.value = false
-                    viewModel.reloadOpen()
-                }) { Text("Reload") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReloadDialog.value = false }) { Text("Cancel") }
-            },
-        )
-    }
+    DialogHost(
+        viewModel = viewModel,
+        onSaveAndClose = { id ->
+            saveDocument(id) {
+                if (viewModel.close(id)) onNavigateUp()
+            }
+        },
+        onMinimize = ::minimize,
+        onNothingLeft = onNavigateUp,
+    )
 
     val title = buildString {
         if (viewModel.isModified) append("*")
@@ -323,18 +347,6 @@ fun TextEditorScreen(
             viewModel.openedName != null -> append(viewModel.openedName)
             else -> append(displayPath?.let(::fileNameOf) ?: "")
         }
-    }
-    previewText?.let { markdown ->
-        MarkdownPreviewDialog(
-            markdown = markdown,
-            title = if (viewModel.isNewFile) {
-                "New file"
-            } else {
-                viewModel.openedName ?: displayPath?.let(::fileNameOf) ?: "Preview"
-            },
-            baseUrl = displayPath?.let(::parentOf)?.let { "file://$it/" },
-            onDismiss = { previewText = null },
-        )
     }
     val editorOffset by animateDpAsState(
         targetValue = if (showSettings) (-48).dp else 0.dp,
@@ -346,330 +358,402 @@ fun TextEditorScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface),
     ) {
-        Scaffold(
-            modifier = Modifier.offset(x = editorOffset),
-            contentWindowInsets = WindowInsets.ime,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            topBar = {
-                TopBarActions(
-                    title = title,
-                    cursorLine = cursorLine,
-                    cursorColumn = cursorColumn,
-                    lineCount = lineCount,
-                    editorRef = editorRef,
-                    viewModel = viewModel,
-                    saveButtonState = saveButtonState,
-                    onSave = ::saveFile,
-                    onPreview = {
-                        previewText = editorRef?.text?.toString() ?: viewModel.content.toString()
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = !drawerState.isClosed,
+            drawerContent = {
+                EditorDrawerSheet(
+                    documents = viewModel.openDocuments,
+                    activeDocumentId = viewModel.activeDocumentId,
+                    onSelect = { id ->
+                        scope.launch { drawerState.close() }
+                        switchToDocument(id)
                     },
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    refreshUndoRedo = ::refreshUndoRedo,
-                    showOverflowMenu = showOverflowMenu,
-                    onShowOverflowMenuChange = { showOverflowMenu = it },
-                    showSearchPanel = showSearchPanel,
-                    onShowSearchPanelChange = { showSearchPanel = it },
-                    onShowSettingsChange = { showSettings = it },
-                    detectedScope = detectedScope,
-                    languageOverride = viewModel.languageOverride,
-                    onLanguageSelected = { viewModel.setLanguage(it) },
+                    onClose = { id -> closeDocument(id) },
+                    onMinimize = ::minimize,
+                    width = 270.dp,
                 )
             },
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize(),
-            ) {
-                if (viewModel.isLoading) {
-                    EditorLoadingIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp),
+        ) {
+            Scaffold(
+                modifier = Modifier.offset(x = editorOffset),
+                contentWindowInsets = WindowInsets.ime,
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                topBar = {
+                    TopBarActions(
+                        title = title,
+                        cursorLine = cursorLine,
+                        cursorColumn = cursorColumn,
+                        lineCount = lineCount,
+                        editorRef = editorRef,
+                        viewModel = viewModel,
+                        saveButtonState = saveButtonState,
+                        onSave = ::saveFile,
+                        onPreview = {
+                            viewModel.openPreview(
+                                editorRef?.text?.toString() ?: viewModel.content.toString()
+                            )
+                        },
+                        canUndo = canUndo,
+                        canRedo = canRedo,
+                        refreshUndoRedo = ::refreshUndoRedo,
+                        showOverflowMenu = showOverflowMenu,
+                        onShowOverflowMenuChange = { showOverflowMenu = it },
+                        showSearchPanel = showSearchPanel,
+                        onShowSearchPanelChange = { showSearchPanel = it },
+                        onShowSettingsChange = { showSettings = it },
+                        onOpenDrawer = {
+                            editorRef?.hideSoftInput()
+                            scope.launch { drawerState.open() }
+                        },
+                        onCloseFile = { closeDocument(viewModel.activeDocumentId) },
+                        onShowLanguagePicker = { viewModel.openLanguageDialog(detectedScope) },
                     )
-                }
-                when (val state = viewModel.loadState) {
-                    is LoadState.Loading -> {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = Color(PRELOAD_BG_DARK),
-                            content = { })
-                    }
-
-                    is LoadState.Error -> {
-                        Text(
-                            text = state.message,
-                            color = MaterialTheme.colorScheme.error,
+                },
+            ) { paddingValues ->
+                Column(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize(),
+                ) {
+                    if (viewModel.isLoading) {
+                        EditorLoadingIndicator(
                             modifier = Modifier
-                                .align(Alignment.CenterHorizontally)
-                                .padding(16.dp),
+                                .fillMaxWidth()
+                                .height(2.dp),
                         )
                     }
+                    when (val state = viewModel.loadState) {
+                        is LoadState.Loading -> {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = Color(PRELOAD_BG_DARK),
+                                content = { })
+                        }
 
-                    is LoadState.Success -> {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                        ) {
-                            if (viewModel.prefsLoaded && viewModel.grammarsSettled) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        CodeEditor(ctx).apply {
-                                            applyTheme(this, viewModel.selectedTheme)
-                                            isWordwrap = viewModel.wordWrap
-                                            isLineNumberEnabled = viewModel.lineNumbers
-                                            typefaceText = typefaceToLoad
-                                            typefaceLineNumber = typefaceToLoad
-                                            applyMinimap(
-                                                this, viewModel.miniMap, viewModel.miniMapBlocks
-                                            )
-                                        applyInvisibleChars(this, viewModel.invisibleChars)
-                                        @Suppress("UsePropertyAccessSyntax") setText(viewModel.content)
-                                        setEditorLanguage(activeLanguage)
-                                        setEditable(!viewModel.readOnly)
-                                            subscribeEvent(LayoutStateChangeEvent::class.java) { event, _ ->
-                                                if (!event.isLayoutBusy) {
-                                                    layoutReady = true
-                                                }
+                        is LoadState.Error -> {
+                            Text(
+                                text = state.message,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .padding(16.dp),
+                            )
+                        }
+
+                        is LoadState.Success -> {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            ) {
+                                if (viewModel.prefsLoaded && viewModel.grammarsSettled) {
+                                    AnimatedContent(
+                                        targetState = viewModel.activeDocumentId,
+                                        transitionSpec = {
+                                            val documents = viewModel.openDocuments
+                                            val from = documents.indexOfFirst {
+                                                it.id == initialState
                                             }
-                                            if (viewModel.textSizePx > 0f) setTextSizePx(viewModel.textSizePx)
-                                            registerInlayHintRenderers(
-                                                TextInlayHintRenderer.DefaultInstance,
-                                                ColorInlayHintRenderer.DefaultInstance,
-                                            )
-                                            registerExtraStylesProvider { line, styles ->
-                                                val caret = cursor
-                                                if (!caret.isSelected && line == caret.leftLine) {
-                                                    styles.add(
-                                                        LineBackground(
-                                                            line,
-                                                            ConstColor(CURRENT_LINE_TINT),
-                                                        )
-                                                    )
-                                                }
+                                            val to = documents.indexOfFirst {
+                                                it.id == targetState
                                             }
-                                            setLineSpacing(2f, 1.1f)
-                                            layoutParams = ViewGroup.LayoutParams(
-                                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                            )
-                                            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                                                if (height > 0) {
-                                                    verticalExtraSpaceFactor =
-                                                        (BOTTOM_SCROLL_EXTRA_DP * dpUnit / height).coerceIn(
-                                                            0f, 1f
-                                                        )
-                                                }
-                                            }
-                                            searcher.replaceOptions =
-                                                EditorSearcher.ReplaceOptions(true)
-                                            EditorSpanInteractionHandler(this)
-                                        getComponent<EditorAutoCompletion>().apply {
-                                            setEnabledAnimation(true)
-                                            setEnabled(viewModel.autoCompletion)
+                                            val direction = if (from in 0..to) 1 else -1
+                                            slideInHorizontally(tween(240)) { width ->
+                                                direction * width
+                                            } togetherWith slideOutHorizontally(
+                                                tween(240)
+                                            ) { width -> -direction * width }
+                                        },
+                                        label = "documentSwitch",
+                                    ) { shownId ->
+                                        var laidOut by remember(shownId) {
+                                            mutableStateOf(false)
                                         }
-                                            subscribeEvent(ContentChangeEvent::class.java) { event, _ ->
-                                                canUndo.value = canUndo()
-                                                canRedo.value = canRedo()
-                                                viewModel.onContentChanged(event.action)
-                                                val start = event.changeStart.line
-                                                val end = event.changeEnd.line
-                                                if (start <= end && end < text.lineCount && end - start <= EMBEDDED_SCAN_LINES) {
-                                                    viewModel.onLinesEdited(
-                                                        (start..end).map { text.getLine(it) },
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                CodeEditor(ctx).apply {
+                                                    applyTheme(this, viewModel.selectedTheme)
+                                                    isWordwrap = viewModel.wordWrap
+                                                    isLineNumberEnabled = viewModel.lineNumbers
+                                                    typefaceText = typefaceToLoad
+                                                    typefaceLineNumber = typefaceToLoad
+                                                    applyMinimap(
+                                                        this,
+                                                        viewModel.miniMap,
+                                                        viewModel.miniMapBlocks
                                                     )
-                                                } else if (text.isNotEmpty()) {
-                                                    viewModel.onLinesEdited(
-                                                        listOf(
-                                                            text.subSequence(
-                                                                0,
-                                                                minOf(
-                                                                    text.length,
-                                                                    EMBEDDED_SCAN_CHARS
-                                                                ),
-                                                            ),
-                                                        ),
+                                                    applyInvisibleChars(
+                                                        this,
+                                                        viewModel.invisibleChars
                                                     )
-                                                }
-                                            }
-                                            viewModel.restoreCursorState(this)
-
-                                            fun isImeVisible(): Boolean {
-                                                val insets =
-                                                    ViewCompat.getRootWindowInsets(this)
-                                                        ?: return false
-                                                return insets.isVisible(WindowInsetsCompat.Type.ime())
-                                            }
-
-                                            var selectionTap = false
-                                            var forwardingToEditor = false
-                                            var pendingDown: MotionEvent? = null
-                                            var downX = 0f
-                                            var downY = 0f
-                                            val touchSlop =
-                                                ViewConfiguration.get(ctx).scaledTouchSlop
-
-                                            setOnTouchListener { view, event ->
-                                                if (isImeVisible()) return@setOnTouchListener false
-                                                when (event.actionMasked) {
-                                                    MotionEvent.ACTION_DOWN -> {
-                                                        val cur = cursor
-                                                        val onHandle =
-                                                            leftHandleDescriptor.position.contains(
-                                                                event.x,
-                                                                event.y,
-                                                            ) || rightHandleDescriptor.position.contains(
-                                                                event.x,
-                                                                event.y,
-                                                            ) || insertHandleDescriptor.position.contains(
-                                                                event.x,
-                                                                event.y,
-                                                            )
-                                                        forwardingToEditor = false
-                                                        selectionTap = false
-                                                        if (!onHandle && cur.isSelected && isScreenPointOnText(
-                                                                event.x,
-                                                                event.y,
-                                                            )
-                                                        ) {
-                                                            val pos = getPointPositionOnScreen(
-                                                                event.x, event.y
-                                                            )
-                                                            val line = IntPair.getFirst(pos)
-                                                            val column = IntPair.getSecond(pos)
-                                                            val tapIndex =
-                                                                text.getCharIndex(line, column)
-                                                            val withinLines =
-                                                                line in cur.leftLine..cur.rightLine
-                                                            if (withinLines && tapIndex in cur.left..cur.right) {
-                                                                selectionTap = true
-                                                                downX = event.x
-                                                                downY = event.y
-                                                                pendingDown =
-                                                                    MotionEvent.obtain(event)
-                                                                return@setOnTouchListener true
-                                                            }
+                                                    @Suppress("UsePropertyAccessSyntax")
+                                                    setText(viewModel.content)
+                                                    setEditorLanguage(activeLanguage)
+                                                    setEditable(!viewModel.readOnly)
+                                                    subscribeEvent(
+                                                        LayoutStateChangeEvent::class.java
+                                                    ) { event, _ ->
+                                                        if (!event.isLayoutBusy) {
+                                                            laidOut = true
+                                                            layoutReady = true
                                                         }
-                                                        false
+                                                    }
+                                                    if (viewModel.textSizePx > 0f) {
+                                                        setTextSizePx(viewModel.textSizePx)
+                                                    }
+                                                    registerInlayHintRenderers(
+                                                        TextInlayHintRenderer.DefaultInstance,
+                                                        ColorInlayHintRenderer.DefaultInstance,
+                                                    )
+                                                    registerExtraStylesProvider { line, styles ->
+                                                        val caret = cursor
+                                                        if (!caret.isSelected && line == caret.leftLine) {
+                                                            styles.add(
+                                                                LineBackground(
+                                                                    line,
+                                                                    ConstColor(CURRENT_LINE_TINT),
+                                                                )
+                                                            )
+                                                        }
+                                                    }
+                                                    setLineSpacing(2f, 1.1f)
+                                                    layoutParams = ViewGroup.LayoutParams(
+                                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                                    )
+                                                    addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                                                        if (height > 0) {
+                                                            verticalExtraSpaceFactor =
+                                                                (BOTTOM_SCROLL_EXTRA_DP * dpUnit / height)
+                                                                    .coerceIn(
+                                                                        0f, 1f
+                                                                    )
+                                                        }
+                                                    }
+                                                    searcher.replaceOptions =
+                                                        EditorSearcher.ReplaceOptions(true)
+                                                    EditorSpanInteractionHandler(this)
+                                                    getComponent<EditorAutoCompletion>().apply {
+                                                        setEnabledAnimation(true)
+                                                        setEnabled(viewModel.autoCompletion)
+                                                    }
+                                                    subscribeEvent(
+                                                        ContentChangeEvent::class.java
+                                                    ) { event, _ ->
+                                                        canUndo.value = canUndo()
+                                                        canRedo.value = canRedo()
+                                                        viewModel.onContentChanged(event.action)
+                                                        val start = event.changeStart.line
+                                                        val end = event.changeEnd.line
+                                                        if (start <= end && end < text.lineCount && end - start <= EMBEDDED_SCAN_LINES) {
+                                                            viewModel.onLinesEdited(
+                                                                (start..end).map { text.getLine(it) },
+                                                            )
+                                                        } else if (text.isNotEmpty()) {
+                                                            viewModel.onLinesEdited(
+                                                                listOf(
+                                                                    text.subSequence(
+                                                                        0,
+                                                                        minOf(
+                                                                            text.length,
+                                                                            EMBEDDED_SCAN_CHARS
+                                                                        ),
+                                                                    ),
+                                                                ),
+                                                            )
+                                                        }
+                                                    }
+                                                    viewModel.restoreCursorState(
+                                                        shownId,
+                                                        this,
+                                                    )
+
+                                                    fun isImeVisible(): Boolean {
+                                                        val insets =
+                                                            ViewCompat.getRootWindowInsets(this)
+                                                                ?: return false
+                                                        return insets.isVisible(WindowInsetsCompat.Type.ime())
                                                     }
 
-                                                    MotionEvent.ACTION_MOVE -> {
-                                                        if (selectionTap && !forwardingToEditor) {
-                                                            val dx = event.x - downX
-                                                            val dy = event.y - downY
-                                                            if (dx * dx + dy * dy > touchSlop * touchSlop) {
-                                                                forwardingToEditor = true
-                                                                selectionTap = false
-                                                                pendingDown?.let {
-                                                                    view.onTouchEvent(
-                                                                        it
+                                                    var selectionTap = false
+                                                    var forwardingToEditor = false
+                                                    var pendingDown: MotionEvent? = null
+                                                    var downX = 0f
+                                                    var downY = 0f
+                                                    val touchSlop =
+                                                        ViewConfiguration.get(ctx).scaledTouchSlop
+
+                                                    setOnTouchListener { view, event ->
+                                                        if (isImeVisible()) return@setOnTouchListener false
+                                                        when (event.actionMasked) {
+                                                            MotionEvent.ACTION_DOWN -> {
+                                                                val cur = cursor
+                                                                val onHandle =
+                                                                    leftHandleDescriptor.position.contains(
+                                                                        event.x,
+                                                                        event.y,
+                                                                    ) || rightHandleDescriptor.position.contains(
+                                                                        event.x,
+                                                                        event.y,
+                                                                    ) || insertHandleDescriptor.position.contains(
+                                                                        event.x,
+                                                                        event.y,
                                                                     )
+                                                                forwardingToEditor = false
+                                                                selectionTap = false
+                                                                if (!onHandle && cur.isSelected && isScreenPointOnText(
+                                                                        event.x,
+                                                                        event.y,
+                                                                    )
+                                                                ) {
+                                                                    val pos =
+                                                                        getPointPositionOnScreen(
+                                                                            event.x, event.y
+                                                                        )
+                                                                    val line = IntPair.getFirst(pos)
+                                                                    val column =
+                                                                        IntPair.getSecond(pos)
+                                                                    val tapIndex =
+                                                                        text.getCharIndex(
+                                                                            line,
+                                                                            column
+                                                                        )
+                                                                    val withinLines =
+                                                                        line in cur.leftLine..cur.rightLine
+                                                                    if (withinLines && tapIndex in cur.left..cur.right) {
+                                                                        selectionTap = true
+                                                                        downX = event.x
+                                                                        downY = event.y
+                                                                        pendingDown =
+                                                                            MotionEvent.obtain(event)
+                                                                        return@setOnTouchListener true
+                                                                    }
                                                                 }
+                                                                false
+                                                            }
+
+                                                            MotionEvent.ACTION_MOVE -> {
+                                                                if (selectionTap && !forwardingToEditor) {
+                                                                    val dx = event.x - downX
+                                                                    val dy = event.y - downY
+                                                                    if (dx * dx + dy * dy > touchSlop * touchSlop) {
+                                                                        forwardingToEditor = true
+                                                                        selectionTap = false
+                                                                        pendingDown?.let {
+                                                                            view.onTouchEvent(
+                                                                                it
+                                                                            )
+                                                                        }
+                                                                        pendingDown?.recycle()
+                                                                        pendingDown = null
+                                                                    } else {
+                                                                        return@setOnTouchListener true
+                                                                    }
+                                                                }
+                                                                if (forwardingToEditor) {
+                                                                    view.onTouchEvent(event)
+                                                                    true
+                                                                } else {
+                                                                    false
+                                                                }
+                                                            }
+
+                                                            MotionEvent.ACTION_UP -> {
+                                                                val consumed = when {
+                                                                    forwardingToEditor -> {
+                                                                        view.onTouchEvent(event)
+                                                                        true
+                                                                    }
+
+                                                                    selectionTap -> {
+                                                                        selectionTap = false
+                                                                        view.performClick()
+                                                                        showSoftInput()
+                                                                        true
+                                                                    }
+
+                                                                    else -> {
+                                                                        false
+                                                                    }
+                                                                }
+                                                                forwardingToEditor = false
                                                                 pendingDown?.recycle()
                                                                 pendingDown = null
-                                                            } else {
-                                                                return@setOnTouchListener true
-                                                            }
-                                                        }
-                                                        if (forwardingToEditor) {
-                                                            view.onTouchEvent(event)
-                                                            true
-                                                        } else {
-                                                            false
-                                                        }
-                                                    }
-
-                                                    MotionEvent.ACTION_UP -> {
-                                                        val consumed = when {
-                                                            forwardingToEditor -> {
-                                                                view.onTouchEvent(event)
-                                                                true
+                                                                consumed
                                                             }
 
-                                                            selectionTap -> {
+                                                            MotionEvent.ACTION_CANCEL -> {
+                                                                if (forwardingToEditor) view.onTouchEvent(
+                                                                    event
+                                                                )
                                                                 selectionTap = false
-                                                                view.performClick()
-                                                                showSoftInput()
-                                                                true
+                                                                forwardingToEditor = false
+                                                                pendingDown?.recycle()
+                                                                pendingDown = null
+                                                                false
                                                             }
 
                                                             else -> {
-                                                                false
+                                                                forwardingToEditor
                                                             }
                                                         }
-                                                        forwardingToEditor = false
-                                                        pendingDown?.recycle()
-                                                        pendingDown = null
-                                                        consumed
                                                     }
-
-                                                    MotionEvent.ACTION_CANCEL -> {
-                                                        if (forwardingToEditor) view.onTouchEvent(
-                                                            event
-                                                        )
-                                                        selectionTap = false
-                                                        forwardingToEditor = false
-                                                        pendingDown?.recycle()
-                                                        pendingDown = null
-                                                        false
-                                                    }
-
-                                                    else -> {
-                                                        forwardingToEditor
-                                                    }
-                                                }
-                                            }
-                                        }.also { editorRef = it }
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                    onRelease = { editor ->
-                                        layoutReady = false
-                                        viewModel.saveCursorState(editor)
-                                        editor.release()
-                                    },
-                                )
-                            }
-                            // hijack the view until wordwrap finishes loading
-                            if (!layoutReady) {
-                                Surface(
-                                    modifier = Modifier.fillMaxSize(),
-                                    color = Color(PRELOAD_BG_DARK),
-                                    content = { })
+                                                }.also { editorRef = it }
+                                            },
+                                            modifier = Modifier.fillMaxSize(),
+                                            onRelease = { editor ->
+                                                viewModel.saveCursorState(shownId, editor)
+                                                if (editorRef === editor) editorRef = null
+                                                editor.release()
+                                            },
+                                        )
+                                        if (!laidOut) {
+                                            Surface(
+                                                modifier = Modifier.fillMaxSize(),
+                                                color = Color(PRELOAD_BG_DARK),
+                                                content = { })
+                                        }
+                                    }
+                                } else {
+                                    Surface(
+                                        modifier = Modifier.fillMaxSize(),
+                                        color = Color(PRELOAD_BG_DARK),
+                                        content = { })
+                                }
                             }
                         }
                     }
-                }
-                AnimatedVisibility(
-                    visible = (viewModel.symbolBar && layoutReady && !viewModel.readOnly),
-                    enter = expandVertically(
-                        animationSpec = tween(durationMillis = 220),
-                        expandFrom = Alignment.Bottom,
-                    ),
-                    exit = shrinkVertically(
-                        animationSpec = tween(durationMillis = 220),
-                        shrinkTowards = Alignment.Bottom,
-                    ),
-                ) {
-                    SymbolInputBar(
-                        editor = editorRef,
-                        typeface = typefaceToLoad,
-                        applyNavigationBarPadding = !showSearchPanel,
-                    )
-                }
-                AnimatedVisibility(
-                    visible = (showSearchPanel && layoutReady && !viewModel.readOnly),
-                    enter = expandVertically(
-                        animationSpec = tween(durationMillis = 220),
-                        expandFrom = Alignment.Top,
-                    ),
-                    exit = shrinkVertically(
-                        animationSpec = tween(durationMillis = 220),
-                        shrinkTowards = Alignment.Top,
-                    ),
-                ) {
-                    CustomSearchBar(editor = editorRef, initialQuery = initialSearchQuery)
+                    AnimatedVisibility(
+                        visible = (viewModel.symbolBar && layoutReady && !viewModel.readOnly),
+                        enter = expandVertically(
+                            animationSpec = tween(durationMillis = 220),
+                            expandFrom = Alignment.Bottom,
+                        ),
+                        exit = shrinkVertically(
+                            animationSpec = tween(durationMillis = 220),
+                            shrinkTowards = Alignment.Bottom,
+                        ),
+                    ) {
+                        SymbolInputBar(
+                            editor = editorRef,
+                            typeface = typefaceToLoad,
+                            applyNavigationBarPadding = !showSearchPanel,
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = (showSearchPanel && layoutReady && !viewModel.readOnly),
+                        enter = expandVertically(
+                            animationSpec = tween(durationMillis = 220),
+                            expandFrom = Alignment.Top,
+                        ),
+                        exit = shrinkVertically(
+                            animationSpec = tween(durationMillis = 220),
+                            shrinkTowards = Alignment.Top,
+                        ),
+                    ) {
+                        CustomSearchBar(editor = editorRef, initialQuery = searchQuery)
+                    }
                 }
             }
         }
@@ -751,4 +835,3 @@ private fun applyInvisibleChars(
         0
     }
 }
-

@@ -31,11 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,8 +43,6 @@ import texteditor.FontRegistry
 import texteditor.PRELOAD_BG_DARK
 import texteditor.SoraEditorViewModel
 import texteditor.ThemeRegistry
-import texteditor.dialogs.FontChoiceDialog
-import texteditor.dialogs.ThemeChoiceDialog
 import ui.PaneShadow
 import java.io.File
 
@@ -58,38 +52,7 @@ fun EditorSettingsScreen(
     onNavigateUp: () -> Unit,
 ) {
     BackHandler(onBack = onNavigateUp)
-    var showThemePicker by rememberSaveable { mutableStateOf(false) }
-    var showFontPicker by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
-    if (showThemePicker) {
-        ThemeChoiceDialog(
-            selected = viewModel.selectedTheme,
-            onThemeSelected = { viewModel.setTheme(it) },
-            onDismiss = { showThemePicker = false },
-        )
-    }
-    if (showFontPicker) {
-        FontChoiceDialog(
-            fontOptions = viewModel.fontOptions,
-            systemFontOptions = viewModel.systemFontOptions,
-            onShowSystemFonts = { viewModel.loadSystemFonts() },
-            selected = viewModel.selectedFont,
-            onSelect = { viewModel.setFont(it) },
-            onFontImported = { imported ->
-                viewModel.refreshFontOptions()
-                viewModel.setFont(imported.id)
-            },
-            onFontDeleted = { deleted ->
-                val newFontId =
-                    FontRegistry.deleteImportedFont(context, deleted.id, viewModel.selectedFont)
-                if (newFontId != viewModel.selectedFont) {
-                    viewModel.setFont(newFontId)
-                }
-                viewModel.refreshFontOptions()
-            },
-            onDismiss = { showFontPicker = false },
-        )
-    }
     val themeDisplayName =
         ThemeRegistry.availableThemes.find { it.id == viewModel.selectedTheme }?.displayName
             ?: viewModel.selectedTheme
@@ -144,22 +107,22 @@ fun EditorSettingsScreen(
                     SectionHeader("Appearance")
                     SettingsRow(
                         label = "Theme",
-                        description = "Placeholder: theme description",
+                        description = "Coming soon",
                         enabled = false,
-                        onClick = { showThemePicker = true },
+                        onClick = { viewModel.openThemeDialog() },
                         trailing = { ValueWithChevron(themeDisplayName) },
                     )
                     SettingsRow(
                         label = "Font",
-                        description = "Placeholder: font description",
-                        onClick = { showFontPicker = true },
+                        description = "Change the editors font",
+                        onClick = { viewModel.openFontDialog() },
                         trailing = { ValueWithChevron(fontDisplayName, fontFamily) },
                     )
                     HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
                     SectionHeader("Editor")
                     SettingsRow(
                         label = "Syntax highlighting",
-                        description = "Placeholder: syntax highlighting description",
+                        description = "Show language colors",
                         onClick = { viewModel.toggleSyntaxHighlight() },
                         trailing = {
                             Switch(
@@ -169,7 +132,7 @@ fun EditorSettingsScreen(
                     )
                     SettingsRow(
                         label = "Line numbers",
-                        description = "Placeholder: line numbers description",
+                        description = "Show number line",
                         onClick = { viewModel.toggleLineNumbers() },
                         trailing = {
                             Switch(
@@ -179,13 +142,13 @@ fun EditorSettingsScreen(
                     )
                     SettingsRow(
                         label = "Minimap",
-                        description = "Placeholder: minimap description",
+                        description = "Show minimap on end",
                         onClick = { viewModel.toggleMinimap() },
                         trailing = { Switch(checked = viewModel.miniMap, onCheckedChange = null) },
                     )
                     SettingsRow(
                         label = "Minimap blocks",
-                        description = "Placeholder: minimap blocks description",
+                        description = "Show blocks in minimap instead of text",
                         enabled = viewModel.miniMap,
                         onClick = { viewModel.toggleMinimapBlocks() },
                         trailing = {
@@ -198,7 +161,7 @@ fun EditorSettingsScreen(
                     )
                     SettingsRow(
                         label = "Symbol bar",
-                        description = "Placeholder: symbol bar description",
+                        description = "Show bar on bottom",
                         onClick = { viewModel.toggleSymbolBar() },
                         trailing = {
                             Switch(
@@ -208,7 +171,7 @@ fun EditorSettingsScreen(
                     )
                     SettingsRow(
                         label = "Invisible characters",
-                        description = "Placeholder: invisible characters description",
+                        description = "Show hinted glyphs",
                         onClick = { viewModel.toggleInvisibleChars() },
                         trailing = {
                             Switch(

@@ -1,4 +1,4 @@
-package texteditor.preview
+package texteditor.dialogs.preview
 
 import android.annotation.SuppressLint
 import android.content.Context

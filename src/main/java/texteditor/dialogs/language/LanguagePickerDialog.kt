@@ -1,4 +1,4 @@
-package texteditor.dialogs
+package texteditor.dialogs.language
 
 import android.content.res.Configuration
 import androidx.compose.foundation.background

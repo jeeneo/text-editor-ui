@@ -8,6 +8,7 @@ import android.content.SharedPreferences
 import android.graphics.drawable.ColorDrawable
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,6 +35,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.IOException
+import texteditor.dialogs.data.DialogController
+import texteditor.dialogs.data.DialogRequest
 import kotlin.time.Duration.Companion.milliseconds
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as EditorThemeRegistry
 
@@ -120,6 +123,15 @@ sealed interface LoadState {
     ) : LoadState
 }
 
+@Immutable
+data class OpenDocument(
+    val id: Long,
+    val path: String?,
+    val name: String?,
+    val directory: String?,
+    val isModified: Boolean,
+)
+
 class SoraEditorViewModel(
     application: Application,
     private val host: TextEditorHost,
@@ -127,13 +139,15 @@ class SoraEditorViewModel(
     private var grammarLoadJob: Job? = null
     private var editGrammarJob: Job? = null
     private val prefs get() = getApplication<Application>().editorPrefs
-    private var pendingSelectionLeft: Int = -1
-    private var pendingSelectionRight: Int = -1
-    private var pendingScrollX: Int = 0
-    private var pendingScrollY: Int = 0
     private var openStartedAt = 0L
-    private var newFileDirectory: String? = null
-    private var isSaving = false
+
+    private val activeSession: DocumentSession?
+        get() = DocumentSessions.active
+    var openDocuments: List<OpenDocument> by mutableStateOf(emptyList())
+        private set
+    var activeDocumentId: Long by mutableStateOf(0L)
+        private set
+    val dialogs = DialogController()
 
     var loadState: LoadState by mutableStateOf(LoadState.Loading)
         private set
@@ -143,8 +157,6 @@ class SoraEditorViewModel(
         private set
     var openedName: String? by mutableStateOf(null)
         private set
-
-    /** Charset name detected for the open document, e.g. `UTF-8`. */
     var encoding: String by mutableStateOf(Charsets.UTF_8.name())
         private set
     var grammarsReady: Boolean by mutableStateOf(EditorLanguages.isInitialized)
@@ -196,57 +208,149 @@ class SoraEditorViewModel(
     var content: Content by mutableStateOf(Content())
         private set
 
-    /** Opens [path] as the document to edit; the app owns creating and locating files. */
-    fun open(path: String, name: String) {
+    init {
+        val kept = DocumentSessions.active
+        if (kept != null) {
+            activeDocumentId = kept.id
+            project(kept)
+            publishDocuments()
+        }
         viewModelScope.launch {
-            if (savedPath != path) languageOverride = null
-            newFileDirectory = null
-            isNewFile = false
-            savedPath = path
-            openedName = name
+            prepareEditor()
+            if (kept != null && kept.loadState is LoadState.Loading) {
+                kept.path?.let { loadInto(kept, it) }
+            }
+        }
+    }
+
+    fun open(path: String, name: String) {
+        DocumentSessions.findByPath(path)?.let { alreadyOpen ->
+            activate(alreadyOpen.id)
+            return
+        }
+        val session = DocumentSessions.create(
+            path = path,
+            name = name,
+            directory = null,
+            isNewFile = false,
+        )
+        activate(session.id)
+        viewModelScope.launch {
+            prepareEditor()
             openStartedAt = SystemClock.elapsedRealtime()
             Log.d(
                 TAG,
                 "open ${fileNameOf(path)}: grammar index warm=${EditorLanguages.isInitialized}" +
                         " theme warm=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
             )
-            val app = getApplication<Application>()
-            if (!prefsLoaded) {
-                // The preloader usually owns this already; only hop off main when it has not run.
-                if (!ThemeRegistry.isInitialized) {
-                    withContext(Dispatchers.IO) { ThemeRegistry.initialize(app) }
-                }
-                loadPrefs()
-                refreshFontOptions()
-            }
-            grammarsLoaded()
-            load(path)
+            loadInto(session, path)
         }
     }
 
-    /** Opens an empty buffer that is saved into [directory] once the user edits and saves it. */
     fun openNew(directory: String) {
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            if (!prefsLoaded) {
-                if (!ThemeRegistry.isInitialized) {
-                    withContext(Dispatchers.IO) { ThemeRegistry.initialize(app) }
-                }
-                loadPrefs()
-                refreshFontOptions()
-            }
-            languageOverride = null
-            savedPath = null
-            openedName = null
-            newFileDirectory = directory
-            isNewFile = true
-            isModified = false
-            content = Content()
-            encoding = Charsets.UTF_8.name()
-            languagesLoaded = true
-            loadState = LoadState.Success
-            grammarsLoaded()
+        val session = DocumentSessions.create(
+            path = null,
+            name = null,
+            directory = directory,
+            isNewFile = true,
+        )
+        activate(session.id)
+        viewModelScope.launch { prepareEditor() }
+    }
+
+    fun activate(id: Long) {
+        val session = DocumentSessions.get(id) ?: return
+        DocumentSessions.markUsed(id)
+        if (activeDocumentId != id) {
+            activeDocumentId = id
+            languagesLoaded = false
+            project(session)
+            publishDocuments()
         }
+        if (session.loadState is LoadState.Loading) {
+            session.path?.let { loadInto(session, it) }
+        }
+    }
+
+    fun close(id: Long): Boolean {
+        val wasActive = activeDocumentId == id
+        if (!DocumentSessions.remove(id)) return false
+        if (wasActive) {
+            val next = DocumentSessions.active
+            if (next != null) {
+                activeDocumentId = next.id
+                languagesLoaded = false
+                project(next)
+            }
+        }
+        publishDocuments()
+        return openDocuments.isEmpty()
+    }
+
+    fun requestClose(id: Long): Boolean {
+        val session = DocumentSessions.get(id) ?: return false
+        if (session.isModified) {
+            dialogs.show(DialogRequest.ConfirmClose(id, displayNameOf(session)))
+            return false
+        }
+        return close(id)
+    }
+
+    fun openThemeDialog() {
+        dialogs.show(DialogRequest.Theme)
+    }
+
+    fun openFontDialog() {
+        dialogs.show(DialogRequest.Font)
+    }
+
+    fun openLanguageDialog(detectedScope: String?) {
+        dialogs.show(DialogRequest.Language(detectedScope))
+    }
+
+    fun openReloadDialog() {
+        dialogs.show(DialogRequest.Reload)
+    }
+
+    fun openPreview(markdown: String) {
+        val session = activeSession ?: return
+        dialogs.show(
+            DialogRequest.Preview(
+                markdown = markdown,
+                title = displayNameOf(session),
+                baseUrl = session.path?.let(::parentOf)?.let { "file://$it/" },
+            )
+        )
+    }
+
+    private fun displayNameOf(session: DocumentSession): String =
+        session.name ?: session.path?.let(::fileNameOf) ?: "New file"
+
+    private fun project(session: DocumentSession) {
+        savedPath = session.path
+        openedName = session.name
+        isNewFile = session.isNewFile
+        content = session.content
+        encoding = session.encoding
+        isModified = session.isModified
+        languageOverride = session.languageOverride
+        loadState = session.loadState
+    }
+
+    private fun publishDocuments() {
+        openDocuments = DocumentSessions.snapshot()
+    }
+
+    private suspend fun prepareEditor() {
+        if (!prefsLoaded) {
+            // The preloader usually owns this already; only hop off main when it has not run.
+            if (!ThemeRegistry.isInitialized) {
+                withContext(Dispatchers.IO) { ThemeRegistry.initialize(getApplication()) }
+            }
+            loadPrefs()
+            refreshFontOptions()
+        }
+        grammarsLoaded()
     }
 
     private fun grammarsLoaded() {
@@ -274,7 +378,6 @@ class SoraEditorViewModel(
         }
     }
 
-    /** Called by the editor once it has attached the document's language and tokenized it. */
     fun onLanguagesLoaded() {
         if (!languagesLoaded && openStartedAt > 0L) {
             Log.d(
@@ -286,18 +389,24 @@ class SoraEditorViewModel(
     }
 
     fun saveCursorState(editor: CodeEditor) {
-        val cursor = editor.cursor
-        pendingSelectionLeft = cursor.left
-        pendingSelectionRight = cursor.right
-        pendingScrollX = editor.scroller.currX
-        pendingScrollY = editor.scroller.currY
+        saveCursorState(activeDocumentId, editor)
     }
 
-    fun restoreCursorState(editor: CodeEditor) {
-        if (pendingSelectionLeft < 0) return
+    fun saveCursorState(id: Long, editor: CodeEditor) {
+        val session = DocumentSessions.get(id) ?: return
+        val cursor = editor.cursor
+        session.selectionLeft = cursor.left
+        session.selectionRight = cursor.right
+        session.scrollX = editor.scroller.currX
+        session.scrollY = editor.scroller.currY
+    }
+
+    fun restoreCursorState(id: Long, editor: CodeEditor) {
+        val session = DocumentSessions.get(id) ?: return
+        if (session.selectionLeft < 0) return
         val len = editor.text.length
-        val left = pendingSelectionLeft.coerceIn(0, len)
-        val right = pendingSelectionRight.coerceIn(0, len)
+        val left = session.selectionLeft.coerceIn(0, len)
+        val right = session.selectionRight.coerceIn(0, len)
         val leftPos = editor.text.indexer.getCharPosition(minOf(left, right))
         val rightPos = editor.text.indexer.getCharPosition(maxOf(left, right))
         editor.setSelectionRegion(
@@ -307,7 +416,7 @@ class SoraEditorViewModel(
             rightPos.column,
             false,
         )
-        editor.scroller.startScroll(pendingScrollX, pendingScrollY, 0, 0, 0)
+        editor.scroller.startScroll(session.scrollX, session.scrollY, 0, 0, 0)
         editor.scroller.abortAnimation()
         editor.postInvalidate()
     }
@@ -391,6 +500,8 @@ class SoraEditorViewModel(
 
     /** Sets the language for the open document; `null` returns to detection by file name. */
     fun setLanguage(scope: String?) {
+        val session = activeSession ?: return
+        session.languageOverride = scope
         languageOverride = scope
         if (scope != null) {
             val text = content
@@ -462,63 +573,81 @@ class SoraEditorViewModel(
     }
 
     fun load(path: String) {
-        // Reloading rebuilds the editor, so the new document has to be tokenized again.
-        languagesLoaded = false
-        loadState = LoadState.Loading
-        isModified = false
-        viewModelScope.launch(Dispatchers.IO) {
-            doLoad(path)
+        val session = activeSession ?: return
+        loadInto(session, path)
+    }
+
+    private fun loadInto(session: DocumentSession, path: String) {
+        if (session.loadJob?.isActive == true) return
+        if (activeDocumentId == session.id) {
+            languagesLoaded = false
+            loadState = LoadState.Loading
+            isModified = false
+        }
+        session.loadState = LoadState.Loading
+        session.isModified = false
+        publishDocuments()
+        val job = viewModelScope.launch(Dispatchers.IO) { doLoad(session, path) }
+        session.loadJob = job
+        job.invokeOnCompletion { if (session.loadJob === job) session.loadJob = null }
+    }
+
+    private suspend fun doLoad(session: DocumentSession, path: String) {
+        try {
+            // Read through the host so a root-only file is opened by the
+            // privileged process instead of the app's uid.
+            val (builtContent, detectedEncoding) = host.openRead(path).use { stream ->
+                val buffered =
+                    BufferedInputStream(stream, FileEncodingDetector.SAMPLE_SIZE + 1)
+                val detected = FileEncodingDetector.detect(buffered)
+                ContentIO.createFrom(buffered.readerFor(detected)) to detected
+            }
+            if (syntaxHighlight) {
+                val app = getApplication<Application>()
+                EditorLanguages.initialize(app)
+                val scope = session.languageOverride ?: EditorLanguages.scopeFor(session.name)
+                val preloaded = EditorLanguages.isScopeRegistered(scope)
+                val started = SystemClock.elapsedRealtime()
+                val added = EditorLanguages.registerDocument(scope, builtContent)
+                if (added) EditorLanguages.rebuildGrammar(scope)
+                Log.d(
+                    TAG,
+                    "load ${fileNameOf(path)}: scope=$scope preloaded=$preloaded" +
+                            " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
+                )
+            }
+            session.content = builtContent
+            session.encoding = detectedEncoding.displayName
+            session.loadState = LoadState.Success
+            withContext(Dispatchers.Main) {
+                if (activeDocumentId == session.id) project(session)
+                publishDocuments()
+            }
+        } catch (e: OutOfMemoryError) {
+            finishLoad(session, LoadState.Error(e.localizedMessage ?: "Out of memory"))
+        } catch (e: IOException) {
+            finishLoad(session, LoadState.Error(e.localizedMessage ?: "Read error"))
         }
     }
 
-    private fun doLoad(path: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // Read through the host so a root-only file is opened by the
-                // privileged process instead of the app's uid.
-                val (builtContent, detectedEncoding) = host.openRead(path).use { stream ->
-                    val buffered =
-                        BufferedInputStream(stream, FileEncodingDetector.SAMPLE_SIZE + 1)
-                    val detected = FileEncodingDetector.detect(buffered)
-                    ContentIO.createFrom(buffered.readerFor(detected)) to detected
-                }
-                if (syntaxHighlight) {
-                    val app = getApplication<Application>()
-                    EditorLanguages.initialize(app)
-                    val scope = languageOverride ?: EditorLanguages.scopeFor(openedName)
-                    val preloaded = EditorLanguages.isScopeRegistered(scope)
-                    val started = SystemClock.elapsedRealtime()
-                    val added = EditorLanguages.registerDocument(scope, builtContent)
-                    if (added) EditorLanguages.rebuildGrammar(scope)
-                    Log.d(
-                        TAG,
-                        "load ${fileNameOf(path)}: scope=$scope preloaded=$preloaded" +
-                                " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
-                    )
-                }
-                withContext(Dispatchers.Main) {
-                    content = builtContent
-                    encoding = detectedEncoding.displayName
-                    loadState = LoadState.Success
-                }
-            } catch (e: OutOfMemoryError) {
-                withContext(Dispatchers.Main) {
-                    loadState = LoadState.Error(e.localizedMessage ?: "Out of memory")
-                }
-            } catch (e: IOException) {
-                withContext(Dispatchers.Main) {
-                    loadState = LoadState.Error(e.localizedMessage ?: "Read error")
-                }
-            }
+    private suspend fun finishLoad(session: DocumentSession, state: LoadState) {
+        session.loadState = state
+        withContext(Dispatchers.Main) {
+            if (activeDocumentId == session.id) loadState = state
         }
     }
 
     fun onContentChanged(editorAction: Int) {
-        isModified = editorAction != ContentChangeEvent.ACTION_SET_NEW_TEXT
+        val session = activeSession ?: return
+        if (editorAction == ContentChangeEvent.ACTION_SET_NEW_TEXT || session.isModified) return
+        session.isModified = true
+        isModified = true
+        publishDocuments()
     }
 
     fun onLinesEdited(lines: List<CharSequence>) {
-        val scope = languageOverride ?: EditorLanguages.scopeFor(openedName) ?: return
+        val session = activeSession ?: return
+        val scope = session.languageOverride ?: EditorLanguages.scopeFor(session.name) ?: return
         val text = lines.joinToString("\n")
         if (text.isBlank()) return
         editGrammarJob?.cancel()
@@ -534,45 +663,54 @@ class SoraEditorViewModel(
     }
 
     fun reloadOpen() {
-        savedPath?.let { load(it) }
+        activeSession?.path?.let { load(it) }
     }
 
     fun save(
-        getText: () -> String,
+        getText: (() -> String)? = null,
         onSuccess: () -> Unit,
         onError: (String) -> Unit,
+        id: Long = activeDocumentId,
     ) {
-        val path = savedPath
-        val directory = newFileDirectory
-        if (path == null && directory == null) {
+        val session = DocumentSessions.get(id)
+        if (session == null || (session.path == null && session.directory == null)) {
             onError("No document open")
             return
         }
-        if (isSaving) return
-        isSaving = true
+        if (session.isSaving) return
+        session.isSaving = true
+        val readText: () -> String = if (activeDocumentId == id && getText != null) {
+            getText
+        } else {
+            { session.content.toString() }
+        }
         viewModelScope.launch {
             try {
-                val text = getText()
-                // A new document has no file yet, so let the app ask the user where to put it
-                // instead of silently writing a fixed name into the launching directory.
-                val target = path ?: host.saveAs(NEW_FILE_NAME, directory) ?: return@launch
+                val text = readText()
+                val target = session.path
+                    ?: host.saveAs(NEW_FILE_NAME, session.directory)
+                    ?: return@launch
                 withContext(Dispatchers.IO) {
                     host.save(target, text)
                 }
-                if (path == null) {
-                    savedPath = target
-                    openedName = fileNameOf(target)
-                    newFileDirectory = null
-                    isNewFile = false
+                if (session.path == null) {
+                    session.path = target
+                    session.name = fileNameOf(target)
+                    session.directory = null
+                    session.isNewFile = false
                 }
-                isModified = getText() != text
+                session.isModified = readText() != text
+                withContext(Dispatchers.Main) {
+                    if (activeDocumentId == session.id) project(session)
+                    publishDocuments()
+                }
                 onSuccess()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 onError(e.localizedMessage ?: "Write error")
             } finally {
-                isSaving = false
+                session.isSaving = false
             }
         }
     }

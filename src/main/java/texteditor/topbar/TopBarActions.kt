@@ -49,11 +49,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -66,9 +63,9 @@ import androidx.compose.ui.window.PopupProperties
 import texteditor.SaveButtonState
 import texteditor.SoraEditorViewModel
 import texteditor.TopBarAction
-import texteditor.dialogs.LanguagePickerDialog
 import ui.theme.AppTheme
 import io.github.rosemoe.sora.widget.CodeEditor
+import ui.SimpleShadow
 
 @Composable
 fun TopBarActions(
@@ -89,20 +86,10 @@ fun TopBarActions(
     showSearchPanel: Boolean = false,
     onShowSearchPanelChange: (Boolean) -> Unit = {},
     onShowSettingsChange: (Boolean) -> Unit = {},
-    detectedScope: String? = null,
-    languageOverride: String? = null,
-    onLanguageSelected: (String?) -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
+    onCloseFile: () -> Unit = {},
+    onShowLanguagePicker: () -> Unit = {},
 ) {
-    var showLanguagePicker by rememberSaveable { mutableStateOf(false) }
-
-    if (showLanguagePicker) {
-        LanguagePickerDialog(
-            detectedScope = detectedScope,
-            selected = languageOverride,
-            onSelect = onLanguageSelected,
-            onDismiss = { showLanguagePicker = false },
-        )
-    }
 
     val encoding = viewModel?.encoding ?: "???"
     val statusText = if (lineCount > 0) {
@@ -123,10 +110,10 @@ fun TopBarActions(
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { }) {
+                IconButton(onClick = onOpenDrawer) {
                     Icon(
                         imageVector = Icons.Filled.Menu,
-                        contentDescription = "",
+                        contentDescription = "Open files",
                     )
                 }
                 Spacer(Modifier.weight(1f))
@@ -199,7 +186,7 @@ fun TopBarActions(
                     },
                     TopBarAction("Syntax", Icons.Outlined.Code) {
                         onShowOverflowMenuChange(false)
-                        showLanguagePicker = true
+                        onShowLanguagePicker()
                     },
                     TopBarAction("Previous position", Icons.AutoMirrored.Outlined.ArrowBack) { },
                     TopBarAction("Next position", Icons.AutoMirrored.Outlined.ArrowForward) { },
@@ -223,7 +210,7 @@ fun TopBarActions(
                         onShowSettingsChange(true)
                         onShowOverflowMenuChange(false)
                     },
-                    TopBarAction("Close file", Icons.Outlined.Close) { },
+                    TopBarAction("Close file", Icons.Outlined.Close) { onCloseFile() },
                 )
                 val maxVisibleActions = with(LocalDensity.current) {
                     when (LocalWindowInfo.current.containerSize.width.toDp()) {

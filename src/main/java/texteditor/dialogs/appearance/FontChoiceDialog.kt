@@ -1,10 +1,9 @@
-package texteditor.dialogs
+package texteditor.dialogs.appearance
 
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,67 +41,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import texteditor.FontRegistry
-import texteditor.ThemeRegistry as EditorThemeRegistry
-
-@Composable
-fun ThemeChoiceDialog(
-    selected: String,
-    onThemeSelected: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val themes = EditorThemeRegistry.availableThemes
-    SingleChoiceDialog(
-        title = "Theme",
-        options = themes,
-        selected = themes.find { it.id == selected } ?: themes.firstOrNull(),
-        label = { it?.displayName ?: "" },
-        onSelect = { onThemeSelected(it?.id ?: "") },
-        onDismiss = onDismiss,
-    )
-}
-
-@Composable
-private fun <T> SingleChoiceDialog(
-    title: String,
-    options: List<T>,
-    selected: T,
-    label: (T) -> String,
-    onSelect: (T) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = {
-        Column {
-            LazyColumn {
-                items(options) { option ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onSelect(option)
-                                onDismiss()
-                            }
-                            .padding(vertical = 4.dp),
-                    ) {
-                        RadioButton(selected = option == selected, onClick = {
-                            onSelect(option)
-                            onDismiss()
-                        })
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = label(option),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-        }
-    }, confirmButton = {
-        TextButton(onClick = onDismiss) { Text("Cancel") }
-    })
-}
 
 @Composable
 fun FontChoiceDialog(
