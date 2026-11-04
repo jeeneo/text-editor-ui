@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +26,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItemDefaults.contentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
@@ -32,12 +34,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import texteditor.OpenDocument
 import texteditor.PRELOAD_BG_DARK
+import texteditor.R
 import texteditor.fileNameOf
 import texteditor.parentOf
 import ui.SimpleShadow
@@ -45,8 +49,10 @@ import ui.SimpleShadow
 @Composable
 fun EditorDrawerSheet(
     documents: List<OpenDocument>,
+    pinnedPaths: List<String>,
     activeDocumentId: Long,
     onSelect: (Long) -> Unit,
+    onOpenPath: (String) -> Unit,
     onClose: (Long) -> Unit,
     onMinimize: () -> Unit,
     width: Dp = DrawerDefaults.MaximumDrawerWidth,
@@ -73,8 +79,15 @@ fun EditorDrawerSheet(
                     .fillMaxSize()
                     .background(Color(PRELOAD_BG_DARK))
             ) {
+                val openByPath = documents.mapNotNull { document ->
+                    document.path?.let { it to document }
+                }.toMap()
+                val pinnedPathSet = pinnedPaths.toSet()
+                val openUnpinned = documents.filter {
+                    it.path == null || it.path !in pinnedPathSet
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    if (documents.isEmpty()) {
+                    if (pinnedPaths.isEmpty() && openUnpinned.isEmpty()) {
                         item {
                             Text(
                                 text = "No files open",
@@ -83,15 +96,43 @@ fun EditorDrawerSheet(
                                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                             )
                         }
-                    } else {
-                        items(documents, key = { it.id }) { document ->
+                    }
+                    if (pinnedPaths.isNotEmpty()) {
+                        item {
+                            SectionLabel("Pinned")
+                        }
+                        items(pinnedPaths, key = { "pinned:$it" }) { path ->
+                            val open = openByPath[path]
                             DocumentRow(
-                                document = document,
-                                selected = document.id == activeDocumentId,
-                                onSelect = { onSelect(document.id) },
-                                onClose = { onClose(document.id) },
+                                document = open ?: OpenDocument(
+                                    id = 0L,
+                                    path = path,
+                                    name = fileNameOf(path),
+                                    directory = parentOf(path),
+                                    isModified = false,
+                                ),
+                                selected = open != null && open.id == activeDocumentId,
+                                pinned = true,
+                                onSelect = {
+                                    if (open != null) onSelect(open.id) else onOpenPath(path)
+                                },
+                                onClose = open?.let { document -> { onClose(document.id) } },
                             )
                         }
+                        if (openUnpinned.isNotEmpty()) {
+                            item {
+                                SectionLabel("Open")
+                            }
+                        }
+                    }
+                    items(openUnpinned, key = { it.id }) { document ->
+                        DocumentRow(
+                            document = document,
+                            selected = document.id == activeDocumentId,
+                            pinned = false,
+                            onSelect = { onSelect(document.id) },
+                            onClose = { onClose(document.id) },
+                        )
                     }
                 }
                 Box(
@@ -119,11 +160,22 @@ fun EditorDrawerSheet(
 }
 
 @Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
 private fun DocumentRow(
     document: OpenDocument,
     selected: Boolean,
+    pinned: Boolean,
     onSelect: () -> Unit,
-    onClose: () -> Unit,
+    onClose: (() -> Unit)?,
 ) {
     val name = document.name ?: document.path?.let(::fileNameOf) ?: "New file"
     val location = document.path?.let(::parentOf) ?: document.directory ?: "Not saved yet"
@@ -168,8 +220,20 @@ private fun DocumentRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onClose) {
-            Icon(Icons.Filled.Close, contentDescription = "Close $name")
+        if (pinned) {
+            Icon(
+                painter = painterResource(R.drawable.icon_addpin),
+                contentDescription = "Pinned",
+                tint = contentColor.copy(alpha = 0.4f),
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .size(18.dp),
+            )
+        }
+        if (onClose != null) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Close $name")
+            }
         }
     }
 }

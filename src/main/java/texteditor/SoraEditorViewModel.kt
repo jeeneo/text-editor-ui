@@ -2,6 +2,7 @@
 
 package texteditor
 
+import org.json.JSONArray
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
@@ -108,6 +109,7 @@ private object PrefKeys {
     const val DEFAULT_ENCODING = "default_encoding"
     const val DEFAULT_LINE_ENDING = "default_line_ending"
     const val DETECT_ENCODING = "detect_encoding"
+    const val PINNED_FILES = "pinned_files"
 }
 
 private object EditorDefaults {
@@ -170,14 +172,13 @@ class SoraEditorViewModel(
     var activeDocumentId: Long by mutableStateOf(0L)
         private set
     val dialogs = DialogController()
-
-    /** The preview screen, when one is open; kept here so it survives configuration changes. */
     var preview: PreviewState? by mutableStateOf(null)
         private set
-
     var loadState: LoadState by mutableStateOf(LoadState.Loading)
         private set
     var savedPath: String? by mutableStateOf(null)
+        private set
+    var pinnedPaths: List<String> by mutableStateOf(emptyList())
         private set
     var isNewFile: Boolean by mutableStateOf(false)
         private set
@@ -297,6 +298,15 @@ class SoraEditorViewModel(
         session.originalLineEnding = defaultLineEnding
         activate(session.id)
         viewModelScope.launch { prepareEditor() }
+    }
+
+    fun openNewFile() {
+        val directory = activeSession?.let { it.path?.let(::parentOf) ?: it.directory }
+        if (directory == null) {
+            AppToasts.show(getApplication(), "No folder for a new file")
+            return
+        }
+        openNew(directory)
     }
 
     fun activate(id: Long) {
@@ -448,11 +458,11 @@ class SoraEditorViewModel(
 
     private suspend fun prepareEditor() {
         if (!prefsLoaded) {
-            // The preloader usually owns this already; only hop off main when it has not run.
             if (!ThemeRegistry.isInitialized) {
                 withContext(Dispatchers.IO) { ThemeRegistry.initialize(getApplication()) }
             }
             loadPrefs()
+            validatePinnedPaths()
             refreshFontOptions()
         }
         grammarsLoaded()
@@ -553,6 +563,7 @@ class SoraEditorViewModel(
             )
         }.getOrDefault(LineEnding.LF)
         detectEncoding = prefs.getBoolean(PrefKeys.DETECT_ENCODING, EditorDefaults.DETECT_ENCODING)
+        pinnedPaths = parsePinnedPaths(prefs.getString(PrefKeys.PINNED_FILES, null))
 
         val app = getApplication<Application>()
 
@@ -590,6 +601,29 @@ class SoraEditorViewModel(
             putString(PrefKeys.DEFAULT_ENCODING, defaultEncodingId)
             putString(PrefKeys.DEFAULT_LINE_ENDING, defaultLineEnding.name)
             putBoolean(PrefKeys.DETECT_ENCODING, detectEncoding)
+            putString(PrefKeys.PINNED_FILES, JSONArray(pinnedPaths).toString())
+        }
+    }
+
+    private fun parsePinnedPaths(raw: String?): List<String> {
+        if (raw.isNullOrEmpty()) return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            List(array.length()) { array.getString(it) }
+        }.getOrDefault(emptyList())
+    }
+
+    private suspend fun validatePinnedPaths() {
+        if (pinnedPaths.isEmpty()) return
+        val pinned = pinnedPaths
+        val existing = withContext(Dispatchers.IO) {
+            pinned.filterTo(mutableSetOf()) {
+                runCatching { host.openRead(it).close() }.isSuccess
+            }
+        }
+        if (existing != pinned.toSet()) {
+            pinnedPaths = pinnedPaths.filter { it in existing }
+            savePrefs()
         }
     }
 
@@ -619,7 +653,6 @@ class SoraEditorViewModel(
         else -> availableIds.firstOrNull() ?: ""
     }
 
-    /** Sets the language for the open document; `null` returns to detection by file name. */
     fun setLanguage(scope: String?) {
         val session = activeSession ?: return
         session.languageOverride = scope
@@ -680,6 +713,16 @@ class SoraEditorViewModel(
 
     fun toggleReadOnly() {
         readOnly = !readOnly
+        savePrefs()
+    }
+
+    fun togglePin() {
+        val path = activeSession?.path
+        if (path == null) {
+            AppToasts.show(getApplication(), "Save the file to pin it")
+            return
+        }
+        pinnedPaths = if (path in pinnedPaths) pinnedPaths - path else pinnedPaths + path
         savePrefs()
     }
 

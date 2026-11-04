@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ShortText
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCut
@@ -42,7 +43,6 @@ import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Numbers
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Save
@@ -194,6 +194,7 @@ fun TopBarActions(
         positionHistory.add(offset)
         positionIndex = positionHistory.lastIndex
     }
+    val isPinned = viewModel?.savedPath?.let { it in viewModel.pinnedPaths } == true
     var selected by remember(editorRef) { mutableIntStateOf(0) }
     DisposableEffect(editorRef) {
         val editor = editorRef ?: return@DisposableEffect onDispose { }
@@ -217,7 +218,6 @@ fun TopBarActions(
         statusSuffix
     }
     val context = LocalContext.current
-
     Surface(
         modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer
     ) {
@@ -237,11 +237,19 @@ fun TopBarActions(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { }) {
+                val painter = if (isPinned) {
+                    painterResource(R.drawable.icon_unpin)
+                } else {
+                    painterResource(R.drawable.icon_addpin)
+                }
+                IconButton(
+                    onClick = { viewModel?.togglePin() },
+                    enabled = viewModel?.savedPath != null,
+                ) {
                     Icon(
-                        imageVector = Icons.Filled.PushPin,
-                        contentDescription = "",
-                        modifier = Modifier.rotate(45f),
+                        painter = painter,
+                        contentDescription = if (isPinned) "Unpin" else "Pin",
+                        tint = LocalContentColor.current,
                     )
                 }
                 IconButton(
@@ -302,12 +310,12 @@ fun TopBarActions(
                         onDismissRequest = { editMenuExpanded = false }) {
                         DropdownMenuItem(
                             leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.CopyAll,
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
+                            Icon(
+                                imageVector = Icons.Filled.CopyAll,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
                             text = { Text("Copy line", color = contentColor.copy(alpha = 0.8f)) },
                             onClick = copyLine@{
                                 editMenuExpanded = false
@@ -319,12 +327,12 @@ fun TopBarActions(
                             })
                         DropdownMenuItem(
                             leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.ContentCut,
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
+                            Icon(
+                                imageVector = Icons.Filled.ContentCut,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
                             text = { Text("Cut line", color = contentColor.copy(alpha = 0.8f)) },
                             onClick = cutLine@{
                                 editMenuExpanded = false
@@ -337,12 +345,12 @@ fun TopBarActions(
                             })
                         DropdownMenuItem(
                             leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
                             text = { Text("Delete line", color = contentColor.copy(alpha = 0.8f)) },
                             onClick = deleteLine@{
                                 editMenuExpanded = false
@@ -351,12 +359,12 @@ fun TopBarActions(
                             })
                         DropdownMenuItem(
                             leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.DeleteSweep,
-                                    contentDescription = null,
-                                    tint = contentColor.copy(alpha = 0.5f),
-                                )
-                            },
+                            Icon(
+                                imageVector = Icons.Filled.DeleteSweep,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
                             text = { Text("Clear line", color = contentColor.copy(alpha = 0.8f)) },
                             onClick = clearLine@{
                                 editMenuExpanded = false
@@ -586,7 +594,14 @@ fun TopBarActions(
                             "Settings", Icons.Filled.Settings, closesMenu = true
                         ) { onShowSettingsChange(true) }
                     },
-                    { ActionItem("Close file", Icons.Outlined.Close) { onCloseFile() } },
+                    {
+                        ActionItem("Close file", Icons.Outlined.Close) {
+                            if (isPinned) {
+                                viewModel.togglePin()
+                            }
+                            onCloseFile()
+                        }
+                    },
                 )
                 val barHost = remember { ActionHost(inOverflow = false, dismissMenu = {}) }
                 val menuHost = ActionHost(inOverflow = true) { onShowOverflowMenuChange(false) }
@@ -628,14 +643,28 @@ fun TopBarActions(
                                 text = "File",
                                 style = MaterialTheme.typography.labelMedium,
                             )
+                            DropdownMenuItem(leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            }, text = {
+                                Text(
+                                    "New file", color = contentColor.copy(alpha = 0.8f)
+                                )
+                            }, onClick = {
+                                fileMenuExpanded = false
+                                viewModel?.openNewFile()
+                            })
                             DropdownMenuItem(
                                 leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Save,
-                                        contentDescription = null,
-                                        tint = contentColor.copy(alpha = 0.5f),
-                                    )
-                                },
+                                Icon(
+                                    imageVector = Icons.Filled.Save,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
                                 text = { Text("Save as", color = contentColor.copy(alpha = 0.8f)) },
                                 onClick = {
                                     fileMenuExpanded = false
@@ -643,12 +672,12 @@ fun TopBarActions(
                                 })
                             DropdownMenuItem(
                                 leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Refresh,
-                                        contentDescription = null,
-                                        tint = contentColor.copy(alpha = 0.5f),
-                                    )
-                                },
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
                                 text = { Text("Reload", color = contentColor.copy(alpha = 0.8f)) },
                                 onClick = {
                                     fileMenuExpanded = false

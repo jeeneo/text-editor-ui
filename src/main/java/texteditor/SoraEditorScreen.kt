@@ -401,10 +401,15 @@ fun TextEditorScreen(
             drawerContent = {
                 EditorDrawerSheet(
                     documents = viewModel.openDocuments,
+                    pinnedPaths = viewModel.pinnedPaths,
                     activeDocumentId = viewModel.activeDocumentId,
                     onSelect = { id ->
                         scope.launch { drawerState.close() }
                         switchToDocument(id)
+                    },
+                    onOpenPath = { path ->
+                        scope.launch { drawerState.close() }
+                        viewModel.open(path, fileNameOf(path))
                     },
                     onClose = { id -> closeDocument(id) },
                     onMinimize = ::minimize,
