@@ -162,6 +162,8 @@ class SoraEditorViewModel(
         get() = loadState is LoadState.Loading || !languagesLoaded
     var grammarEpoch: Int by mutableIntStateOf(0)
         private set
+    var reloadEpoch: Int by mutableIntStateOf(0)
+        private set
     var isModified: Boolean by mutableStateOf(false)
         private set
     var languageOverride: String? by mutableStateOf(null)
@@ -302,6 +304,12 @@ class SoraEditorViewModel(
     }
 
     fun openReloadDialog() {
+        val session = activeSession
+        if (session?.path == null) return
+        if (!session.isModified) {
+            reloadOpen()
+            return
+        }
         dialogs.show(DialogRequest.Reload)
     }
 
@@ -570,22 +578,22 @@ class SoraEditorViewModel(
         loadInto(session, path)
     }
 
-    private fun loadInto(session: DocumentSession, path: String) {
+    private fun loadInto(session: DocumentSession, path: String, isReload: Boolean = false) {
         if (session.loadJob?.isActive == true) return
         if (activeDocumentId == session.id) {
-            languagesLoaded = false
+            if (!isReload) languagesLoaded = false
             loadState = LoadState.Loading
             isModified = false
         }
         session.loadState = LoadState.Loading
         session.isModified = false
         publishDocuments()
-        val job = viewModelScope.launch(Dispatchers.IO) { doLoad(session, path) }
+        val job = viewModelScope.launch(Dispatchers.IO) { doLoad(session, path, isReload) }
         session.loadJob = job
         job.invokeOnCompletion { if (session.loadJob === job) session.loadJob = null }
     }
 
-    private suspend fun doLoad(session: DocumentSession, path: String) {
+    private suspend fun doLoad(session: DocumentSession, path: String, isReload: Boolean) {
         try {
             // Read through the host so a root-only file is opened by the
             // privileged process instead of the app's uid.
@@ -613,7 +621,15 @@ class SoraEditorViewModel(
             session.encoding = detectedEncoding.displayName
             session.loadState = LoadState.Success
             withContext(Dispatchers.Main) {
-                if (activeDocumentId == session.id) project(session)
+                if (activeDocumentId == session.id) {
+                    project(session)
+                    if (isReload) {
+                        // The editor has to put the reloaded text in and re-tokenize it. The grammar
+                        // is left to the debounced edit pass, because reloading it now would restart
+                        // the analyzer from two threads at once.
+                        reloadEpoch++
+                    }
+                }
                 publishDocuments()
             }
         } catch (e: OutOfMemoryError) {
@@ -656,7 +672,9 @@ class SoraEditorViewModel(
     }
 
     fun reloadOpen() {
-        activeSession?.path?.let { load(it) }
+        val session = activeSession ?: return
+        val path = session.path ?: return
+        loadInto(session, path, isReload = true)
     }
 
     fun save(

@@ -139,6 +139,7 @@ fun TopBarActions(
     saveButtonState: MutableState<SaveButtonState> = remember { mutableStateOf(SaveButtonState.IDLE) },
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
+    onReload: () -> Unit = {},
     onPreview: () -> Unit = {},
     canUndo: MutableState<Boolean> = remember { mutableStateOf(false) },
     canRedo: MutableState<Boolean> = remember { mutableStateOf(false) },
@@ -472,7 +473,10 @@ fun TopBarActions(
                             )
                         },
                         text = { Text("Reload", color = contentColor.copy(alpha = 0.8f)) },
-                        onClick = { })
+                        onClick = {
+                            fileMenuExpanded = false
+                            onReload()
+                        })
                     DropdownMenuItem(leadingIcon = {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.RotateRight,

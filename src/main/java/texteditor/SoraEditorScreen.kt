@@ -270,6 +270,15 @@ fun TextEditorScreen(
         val language = editorRef?.editorLanguage as? TextMateLanguage ?: return@LaunchedEffect
         withContext(Dispatchers.IO) { language.reloadGrammar() }
     }
+
+    LaunchedEffect(viewModel.reloadEpoch) {
+        if (viewModel.reloadEpoch == 0) return@LaunchedEffect
+        val editor = editorRef ?: return@LaunchedEffect
+        if (viewModel.loadState !is LoadState.Success) return@LaunchedEffect
+        editor.setText(viewModel.content)
+        refreshUndoRedo()
+    }
+
     LaunchedEffect(editorRef, viewModel.wordWrap) {
         if (editorRef?.isWordwrap != viewModel.wordWrap) {
             editorRef?.isWordwrap = viewModel.wordWrap
@@ -401,6 +410,7 @@ fun TextEditorScreen(
                         saveButtonState = saveButtonState,
                         onSave = ::saveFile,
                         onSaveAs = ::saveCopyAsFile,
+                        onReload = { viewModel.openReloadDialog() },
                         onPreview = {
                             viewModel.openPreview(
                                 editorRef?.text?.toString() ?: viewModel.content.toString()
