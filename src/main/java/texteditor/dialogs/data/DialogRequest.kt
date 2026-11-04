@@ -1,20 +1,17 @@
 package texteditor.dialogs.data
 
-/**
- * A question the editor is asking, written as data rather than as a composable call so the view
- * model can decide which dialog is open without knowing how any of them is drawn.
- */
+import texteditor.encoding.EncodingPickerMode
+import texteditor.encoding.LineEnding
+
 sealed interface DialogRequest {
     data object Theme : DialogRequest
 
     data object Font : DialogRequest
 
-    /** Picks the language of the open document; [detectedScope] labels the "Auto" choice. */
     data class Language(
         val detectedScope: String?,
     ) : DialogRequest
 
-    /** The document [documentId] is being closed with unsaved changes. */
     data class ConfirmClose(
         val documentId: Long,
         val documentName: String,
@@ -32,5 +29,29 @@ sealed interface DialogRequest {
         val characterCount: Int,
         val wordCount: Int,
         val lineCount: Int,
+        val encodingLabel: String,
+        val lineEndingLabel: String,
+        val mixedLineEndings: Boolean,
+    ) : DialogRequest
+
+    data class EncodingPicker(
+        val mode: EncodingPickerMode,
+        val currentId: String,
+    ) : DialogRequest
+
+    data class LineEndingPicker(
+        val current: LineEnding,
+        val mixed: Boolean,
+    ) : DialogRequest
+
+    data object DocumentOptions : DialogRequest
+
+    data class ConfirmReopenEncoding(
+        val schemeId: String,
+        val documentName: String,
+    ) : DialogRequest
+
+    data class UnrepresentableCharacters(
+        val encodingLabel: String,
     ) : DialogRequest
 }

@@ -1,4 +1,4 @@
-@file:Suppress("SpellCheckingInspection")
+@file:Suppress("SpellCheckingInspection", "UsePropertyAccessSyntax")
 
 package texteditor
 
@@ -82,9 +82,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import texteditor.bottombar.CustomSearchBar
 import texteditor.bottombar.SymbolInputBar
 import texteditor.dialogs.data.DialogHost
+import texteditor.drawer.EditorDrawerSheet
 import texteditor.screens.preview.MarkdownPreviewScreen
 import texteditor.screens.preview.PreviewState
-import texteditor.drawer.EditorDrawerSheet
 import texteditor.screens.settings.EditorSettingsScreen
 import texteditor.topbar.TopBarActions
 import kotlin.time.Duration.Companion.milliseconds
@@ -432,6 +432,7 @@ fun TextEditorScreen(
                                 editorRef?.text?.toString() ?: viewModel.content.toString()
                             )
                         },
+                        onDocumentOptions = viewModel::openDocumentOptions,
                         onPreview = {
                             viewModel.openPreview(
                                 editorRef?.text?.toString() ?: viewModel.content.toString()

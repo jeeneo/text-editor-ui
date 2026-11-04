@@ -6,6 +6,7 @@ import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.Immutable
@@ -34,10 +35,23 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import texteditor.dialogs.data.DialogController
 import texteditor.dialogs.data.DialogRequest
+import texteditor.encoding.AndroidLegacyDetector
+import texteditor.encoding.EncodingCatalog
+import texteditor.encoding.EncodingDetection
+import texteditor.encoding.EncodingDetector
+import texteditor.encoding.EncodingPickerMode
+import texteditor.encoding.EncodingScheme
+import texteditor.encoding.LineEnding
+import texteditor.encoding.LineEndingInfo
+import texteditor.encoding.LineEndings
+import texteditor.encoding.RecordingReader
+import texteditor.encoding.TextEncoder
+import texteditor.encoding.UnencodableCharacterException
+import texteditor.encoding.bomLengthIn
+import texteditor.encoding.readerFor
 import texteditor.screens.preview.PreviewState
 import java.io.BufferedInputStream
 import java.io.IOException
-import java.nio.charset.Charset
 import kotlin.time.Duration.Companion.milliseconds
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as EditorThemeRegistry
 
@@ -91,6 +105,9 @@ private object PrefKeys {
     const val INVISIBLE_CHARS = "invisible_chars"
     const val READ_ONLY = "read_only"
     const val AUTO_COMPLETION = "auto_completion"
+    const val DEFAULT_ENCODING = "default_encoding"
+    const val DEFAULT_LINE_ENDING = "default_line_ending"
+    const val DETECT_ENCODING = "detect_encoding"
 }
 
 private object EditorDefaults {
@@ -104,6 +121,9 @@ private object EditorDefaults {
     const val INVISIBLE_CHARS = true
     const val READ_ONLY = false
     const val AUTO_COMPLETION = true
+    const val DEFAULT_ENCODING = "utf8"
+    const val DEFAULT_LINE_ENDING = "LF"
+    const val DETECT_ENCODING = true
     const val SELECTED_THEME = "default"
     const val SELECTED_FONT = "fonts/CascadiaCode-Regular.ttf"
 }
@@ -115,6 +135,12 @@ sealed interface LoadState {
         val message: String,
     ) : LoadState
 }
+
+private data class LoadedDocument(
+    val content: Content,
+    val scheme: EncodingScheme,
+    val lineEnding: LineEndingInfo,
+)
 
 @Immutable
 data class OpenDocument(
@@ -134,6 +160,8 @@ class SoraEditorViewModel(
     private val prefs get() = getApplication<Application>().editorPrefs
     private var openStartedAt = 0L
     private var saveCopyInProgress = false
+    private var unencodableSessionId = 0L
+    private var retrySave: (() -> Unit)? = null
 
     private val activeSession: DocumentSession?
         get() = DocumentSessions.active
@@ -155,7 +183,17 @@ class SoraEditorViewModel(
         private set
     var openedName: String? by mutableStateOf(null)
         private set
-    var encoding: String by mutableStateOf(Charsets.UTF_8.name())
+    var encodingLabel: String by mutableStateOf(EncodingCatalog.default.label)
+        private set
+    var lineEndingLabel: String by mutableStateOf(LineEnding.LF.name)
+        private set
+    var lineEndingMixed: Boolean by mutableStateOf(false)
+        private set
+    var defaultEncodingId: String by mutableStateOf(EditorDefaults.DEFAULT_ENCODING)
+        private set
+    var defaultLineEnding: LineEnding by mutableStateOf(LineEnding.LF)
+        private set
+    var detectEncoding: Boolean by mutableStateOf(EditorDefaults.DETECT_ENCODING)
         private set
     var grammarsReady: Boolean by mutableStateOf(EditorLanguages.isInitialized)
         private set
@@ -254,6 +292,9 @@ class SoraEditorViewModel(
             directory = directory,
             isNewFile = true,
         )
+        session.encoding = defaultEncoding()
+        session.lineEnding = defaultLineEnding
+        session.originalLineEnding = defaultLineEnding
         activate(session.id)
         viewModelScope.launch { prepareEditor() }
     }
@@ -329,7 +370,8 @@ class SoraEditorViewModel(
 
     fun openFileInfo(text: CharSequence) {
         val snapshot = text.toString()
-        val charset = runCatching { Charset.forName(encoding) }.getOrDefault(Charsets.UTF_8)
+        val session = activeSession
+        val scheme = session?.encoding ?: defaultEncoding()
         viewModelScope.launch {
             val info = withContext(Dispatchers.Default) {
                 var words = 0
@@ -349,11 +391,20 @@ class SoraEditorViewModel(
                         }
                     }
                 }
+                val byteCount = try {
+                    TextEncoder.encode(snapshot, scheme).size.toLong()
+                } catch (e: UnencodableCharacterException) {
+                    Log.e(TAG, "openFileInfo: $e")
+                    snapshot.toByteArray(Charsets.UTF_8).size.toLong()
+                }
                 DialogRequest.FileInfo(
-                    byteCount = snapshot.toByteArray(charset).size.toLong(),
+                    byteCount = byteCount,
                     characterCount = snapshot.length,
                     wordCount = words,
                     lineCount = lines,
+                    encodingLabel = scheme.label,
+                    lineEndingLabel = session?.lineEnding?.name ?: LineEnding.LF.name,
+                    mixedLineEndings = session?.mixedLineEndings == true,
                 )
             }
             dialogs.show(info)
@@ -381,7 +432,10 @@ class SoraEditorViewModel(
         openedName = session.name
         isNewFile = session.isNewFile
         content = session.content
-        encoding = session.encoding
+        encodingLabel = session.encoding.label
+        lineEndingLabel = session.lineEnding.name
+        lineEndingMixed = session.mixedLineEndings
+        if (session.mixedLineEndings) lineEndingLabel += " (mixed)"
         isModified = session.isModified
         languageOverride = session.languageOverride
         loadState = session.loadState
@@ -485,6 +539,19 @@ class SoraEditorViewModel(
         readOnly = prefs.getBoolean(PrefKeys.READ_ONLY, EditorDefaults.READ_ONLY)
         autoCompletion =
             prefs.getBoolean(PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION)
+        defaultEncodingId =
+            prefs.getString(PrefKeys.DEFAULT_ENCODING, EditorDefaults.DEFAULT_ENCODING)
+                ?: EditorDefaults.DEFAULT_ENCODING
+        if (EncodingCatalog.byId(defaultEncodingId) == null) {
+            defaultEncodingId = EditorDefaults.DEFAULT_ENCODING
+        }
+        defaultLineEnding = runCatching {
+            LineEnding.valueOf(
+                prefs.getString(PrefKeys.DEFAULT_LINE_ENDING, EditorDefaults.DEFAULT_LINE_ENDING)
+                    ?: EditorDefaults.DEFAULT_LINE_ENDING
+            )
+        }.getOrDefault(LineEnding.LF)
+        detectEncoding = prefs.getBoolean(PrefKeys.DETECT_ENCODING, EditorDefaults.DETECT_ENCODING)
 
         val app = getApplication<Application>()
 
@@ -519,6 +586,9 @@ class SoraEditorViewModel(
             putBoolean(PrefKeys.INVISIBLE_CHARS, invisibleChars)
             putBoolean(PrefKeys.READ_ONLY, readOnly)
             putBoolean(PrefKeys.AUTO_COMPLETION, autoCompletion)
+            putString(PrefKeys.DEFAULT_ENCODING, defaultEncodingId)
+            putString(PrefKeys.DEFAULT_LINE_ENDING, defaultLineEnding.name)
+            putBoolean(PrefKeys.DETECT_ENCODING, detectEncoding)
         }
     }
 
@@ -612,11 +682,6 @@ class SoraEditorViewModel(
         savePrefs()
     }
 
-//    fun toggleAutoCompletion() {
-//        autoCompletion = !autoCompletion
-//        savePrefs()
-//    }
-
     fun setFont(font: String) {
         selectedFont = font
         savePrefs()
@@ -627,7 +692,12 @@ class SoraEditorViewModel(
         loadInto(session, path)
     }
 
-    private fun loadInto(session: DocumentSession, path: String, isReload: Boolean = false) {
+    private fun loadInto(
+        session: DocumentSession,
+        path: String,
+        isReload: Boolean = false,
+        forcedEncoding: EncodingScheme? = null,
+    ) {
         if (session.loadJob?.isActive == true) return
         if (activeDocumentId == session.id) {
             if (!isReload) languagesLoaded = false
@@ -637,28 +707,30 @@ class SoraEditorViewModel(
         session.loadState = LoadState.Loading
         session.isModified = false
         publishDocuments()
-        val job = viewModelScope.launch(Dispatchers.IO) { doLoad(session, path, isReload) }
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            doLoad(session, path, isReload, forcedEncoding)
+        }
         session.loadJob = job
         job.invokeOnCompletion { if (session.loadJob === job) session.loadJob = null }
     }
 
-    private suspend fun doLoad(session: DocumentSession, path: String, isReload: Boolean) {
+    private suspend fun doLoad(
+        session: DocumentSession,
+        path: String,
+        isReload: Boolean,
+        forcedEncoding: EncodingScheme? = null,
+    ) {
         try {
             // Read through the host so a root-only file is opened by the
             // privileged process instead of the app's uid.
-            val (builtContent, detectedEncoding) = host.openRead(path).use { stream ->
-                val buffered =
-                    BufferedInputStream(stream, FileEncodingDetector.SAMPLE_SIZE + 1)
-                val detected = FileEncodingDetector.detect(buffered)
-                ContentIO.createFrom(buffered.readerFor(detected)) to detected
-            }
+            val loaded = readDocument(path, forcedEncoding)
             if (syntaxHighlight) {
                 val app = getApplication<Application>()
                 EditorLanguages.initialize(app)
                 val scope = session.languageOverride ?: EditorLanguages.scopeFor(session.name)
                 val preloaded = EditorLanguages.isScopeRegistered(scope)
                 val started = SystemClock.elapsedRealtime()
-                val added = EditorLanguages.registerDocument(scope, builtContent)
+                val added = EditorLanguages.registerDocument(scope, loaded.content)
                 if (added) EditorLanguages.rebuildGrammar(scope)
                 Log.d(
                     TAG,
@@ -666,8 +738,11 @@ class SoraEditorViewModel(
                             " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
                 )
             }
-            session.content = builtContent
-            session.encoding = detectedEncoding.displayName
+            session.content = loaded.content
+            session.encoding = loaded.scheme
+            session.lineEnding = loaded.lineEnding.lineEnding
+            session.originalLineEnding = loaded.lineEnding.lineEnding
+            session.mixedLineEndings = loaded.lineEnding.mixed
             session.loadState = LoadState.Success
             withContext(Dispatchers.Main) {
                 if (activeDocumentId == session.id) {
@@ -685,6 +760,47 @@ class SoraEditorViewModel(
             finishLoad(session, LoadState.Error(e.localizedMessage ?: "Out of memory"))
         } catch (e: IOException) {
             finishLoad(session, LoadState.Error(e.localizedMessage ?: "Read error"))
+        }
+    }
+
+    private fun readDocument(path: String, forced: EncodingScheme?): LoadedDocument {
+        return host.openRead(path).use { stream ->
+            val buffered = BufferedInputStream(stream, EncodingDetector.SAMPLE_SIZE + 1)
+            val sample = EncodingDetector.readSample(buffered)
+            val detection = when {
+                forced != null -> EncodingDetection(
+                    scheme = forced,
+                    bomLength = forced.bomLengthIn(sample),
+                )
+
+                !detectEncoding -> {
+                    val scheme = defaultEncoding()
+                    EncodingDetection(
+                        scheme = scheme,
+                        bomLength = scheme.bomLengthIn(sample),
+                    )
+                }
+
+                else -> EncodingDetector.detect(
+                    sample = sample,
+                    default = defaultEncoding(),
+                    legacyDetector = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        AndroidLegacyDetector
+                    } else {
+                        null
+                    },
+                )
+            }
+            val recording = RecordingReader(
+                buffered.readerFor(detection.scheme, detection.bomLength),
+                EncodingDetector.SAMPLE_SIZE,
+            )
+            val content = ContentIO.createFrom(recording)
+            LoadedDocument(
+                content = content,
+                scheme = detection.scheme,
+                lineEnding = LineEndings.detect(recording.recorded, defaultLineEnding),
+            )
         }
     }
 
@@ -726,6 +842,97 @@ class SoraEditorViewModel(
         loadInto(session, path, isReload = true)
     }
 
+    fun reopenWithEncoding(schemeId: String) {
+        val session = activeSession ?: return
+        val path = session.path ?: return
+        val scheme = EncodingCatalog.byId(schemeId) ?: return
+        loadInto(session, path, isReload = true, forcedEncoding = scheme)
+    }
+
+    fun openEncodingPicker(mode: EncodingPickerMode) {
+        val session = activeSession ?: return
+        if (mode == EncodingPickerMode.REOPEN && session.path == null) return
+        dialogs.show(
+            DialogRequest.EncodingPicker(
+                mode = mode,
+                currentId = session.encoding.id,
+            )
+        )
+    }
+
+    fun applyEncoding(request: DialogRequest.EncodingPicker, schemeId: String) {
+        val session = activeSession ?: return
+        val scheme = EncodingCatalog.byId(schemeId) ?: return
+        dialogs.dismissTop()
+        when (request.mode) {
+            EncodingPickerMode.REOPEN -> {
+                if (session.path == null) return
+                if (session.isModified) {
+                    dialogs.show(
+                        DialogRequest.ConfirmReopenEncoding(schemeId, displayNameOf(session))
+                    )
+                } else {
+                    reopenWithEncoding(schemeId)
+                }
+            }
+
+            EncodingPickerMode.SAVE -> {
+                session.encoding = scheme
+                session.isModified = true
+                if (activeDocumentId == session.id) project(session)
+                publishDocuments()
+            }
+        }
+    }
+
+    fun openLineEndingPicker() {
+        val session = activeSession ?: return
+        dialogs.show(
+            DialogRequest.LineEndingPicker(session.lineEnding, session.mixedLineEndings)
+        )
+    }
+
+    /** Rewrites the open document's separators; the replace is a single undoable edit. */
+    fun setLineEnding(lineEnding: LineEnding) {
+        val session = activeSession ?: return
+        val content = session.content
+        val current = content.toString()
+        val converted = LineEndings.convert(current, lineEnding)
+        session.lineEnding = lineEnding
+        session.mixedLineEndings = false
+        if (converted != current) {
+            content.replace(0, content.length, converted)
+            session.isModified = true
+        }
+        if (activeDocumentId == session.id) project(session)
+        publishDocuments()
+    }
+
+    fun openDocumentOptions() {
+        if (activeSession == null) return
+        dialogs.show(DialogRequest.DocumentOptions)
+    }
+
+    fun saveAsUtf8() {
+        val session = DocumentSessions.get(unencodableSessionId) ?: activeSession ?: return
+        val retry = retrySave
+        retrySave = null
+        unencodableSessionId = 0L
+        dialogs.dismissTop()
+        session.encoding = EncodingCatalog.utf8
+        if (activeDocumentId == session.id) project(session)
+        retry?.invoke()
+    }
+
+    fun cancelUnencodableSave() {
+        retrySave = null
+        unencodableSessionId = 0L
+        dialogs.dismissTop()
+    }
+
+    private fun defaultEncoding(): EncodingScheme =
+        EncodingCatalog.byId(defaultEncodingId) ?: EncodingCatalog.default
+
     fun save(
         getText: (() -> String)? = null,
         onSuccess: () -> Unit,
@@ -747,11 +954,14 @@ class SoraEditorViewModel(
         viewModelScope.launch {
             try {
                 val text = readText()
+                val bytes = withContext(Dispatchers.Default) {
+                    TextEncoder.encode(text, session.encoding)
+                }
                 val target = session.path
                     ?: host.saveAs(NEW_FILE_NAME, session.directory)
                     ?: return@launch
                 withContext(Dispatchers.IO) {
-                    host.save(target, text)
+                    host.save(target, bytes)
                 }
                 if (session.path == null) {
                     session.path = target
@@ -767,6 +977,12 @@ class SoraEditorViewModel(
                 onSuccess()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: UnencodableCharacterException) {
+                unencodableSessionId = session.id
+                retrySave = { save(getText, onSuccess, onError, id) }
+                withContext(Dispatchers.Main) {
+                    dialogs.show(DialogRequest.UnrepresentableCharacters(e.encodingLabel))
+                }
             } catch (e: Exception) {
                 onError(e.localizedMessage ?: "Write error")
             } finally {
@@ -794,17 +1010,26 @@ class SoraEditorViewModel(
         viewModelScope.launch {
             try {
                 val text = getText()
+                val bytes = withContext(Dispatchers.Default) {
+                    TextEncoder.encode(text, session.encoding)
+                }
                 val suggestedName = session.name
                     ?: session.path?.let(::fileNameOf)
                     ?: NEW_FILE_NAME
                 val initialDirectory = session.path?.let(::parentOf) ?: session.directory
                 val target = host.saveAs(suggestedName, initialDirectory) ?: return@launch
                 withContext(Dispatchers.IO) {
-                    host.save(target, text)
+                    host.save(target, bytes)
                 }
                 onSuccess()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: UnencodableCharacterException) {
+                unencodableSessionId = session.id
+                retrySave = { saveCopyAs(getText, onSuccess, onError) }
+                withContext(Dispatchers.Main) {
+                    dialogs.show(DialogRequest.UnrepresentableCharacters(e.encodingLabel))
+                }
             } catch (e: Exception) {
                 onError(e.localizedMessage ?: "Write error")
             } finally {

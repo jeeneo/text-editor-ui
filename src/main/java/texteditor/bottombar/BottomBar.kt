@@ -50,10 +50,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import texteditor.SYMBOLS
 import io.github.rosemoe.sora.widget.CodeEditor
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import texteditor.SYMBOLS
 
 private const val ReferenceWidthDp = 411f
 private const val ReferenceHeightDp = 905f

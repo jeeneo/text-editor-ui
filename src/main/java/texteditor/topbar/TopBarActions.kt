@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
@@ -93,6 +96,7 @@ import texteditor.AppToasts
 import texteditor.R
 import texteditor.SaveButtonState
 import texteditor.SoraEditorViewModel
+import texteditor.encoding.EncodingPickerMode
 import ui.theme.AppTheme
 import kotlin.math.abs
 
@@ -156,6 +160,7 @@ fun TopBarActions(
     onReload: () -> Unit = {},
     onFileInfo: () -> Unit = {},
     onPreview: () -> Unit = {},
+    onDocumentOptions: () -> Unit = {},
     canUndo: MutableState<Boolean> = remember { mutableStateOf(false) },
     canRedo: MutableState<Boolean> = remember { mutableStateOf(false) },
     refreshUndoRedo: () -> Unit = {},
@@ -200,12 +205,14 @@ fun TopBarActions(
         }
         onDispose { receipt.unsubscribe() }
     }
-    val encoding = viewModel?.encoding ?: "???"
+    val encoding = viewModel?.encodingLabel ?: "???"
+    val lineEnding = viewModel?.lineEndingLabel.orEmpty()
     val selectedText = if (selected >= 1) "($selected)  " else ""
+    val statusSuffix = if (lineEnding.isEmpty()) encoding else "$encoding  $lineEnding"
     val statusText = if (lineCount > 0) {
-        "$cursorLine:$cursorColumn  $selectedText$encoding"
+        "$cursorLine:$cursorColumn  $selectedText$statusSuffix"
     } else {
-        encoding
+        statusSuffix
     }
     val context = LocalContext.current
 
@@ -631,41 +638,55 @@ fun TopBarActions(
                                     fileMenuExpanded = false
                                     onReload()
                                 })
-//                            encoding/etc differed
-//                            DropdownMenuItem(leadingIcon = {
-//                                Icon(
-//                                    imageVector = Icons.AutoMirrored.Filled.RotateRight,
-//                                    modifier = Modifier.rotate(45f),
-//                                    contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-//                                )
-//                            }, text = {
-//                                Text(
-//                                    "Reload with charset",
-//                                    color = contentColor.copy(alpha = 0.8f),
-//                                )
-//                            }, onClick = { })
-//                            DropdownMenuItem(leadingIcon = {
-//                                Icon(
-//                                    imageVector = Icons.Filled.FormatSize,
-//                                    contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-//                                )
-//                            }, text = {
-//                                Text(
-//                                    "Set the saved encoding",
-//                                    color = contentColor.copy(alpha = 0.8f),
-//                                )
-//                            }, onClick = { })
-//                            DropdownMenuItem(leadingIcon = {
-//                                Icon(
-//                                    imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
-//                                    contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-//                                )
-//                            }, text = {
-//                                Text(
-//                                    "Linebreak",
-//                                    color = contentColor.copy(alpha = 0.8f),
-//                                )
-//                            }, onClick = { })
+                            DropdownMenuItem(leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                                    modifier = Modifier.rotate(45f),
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            }, text = {
+                                Text(
+                                    "Reopen with encoding",
+                                    color = contentColor.copy(alpha = 0.8f),
+                                )
+                            }, onClick = {
+                                onShowOverflowMenuChange(false)
+                                fileMenuExpanded = false
+                                viewModel?.openEncodingPicker(EncodingPickerMode.REOPEN)
+                            })
+                            DropdownMenuItem(leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.FormatSize,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            }, text = {
+                                Text(
+                                    "Save with encoding",
+                                    color = contentColor.copy(alpha = 0.8f),
+                                )
+                            }, onClick = {
+                                onShowOverflowMenuChange(false)
+                                fileMenuExpanded = false
+                                viewModel?.openEncodingPicker(EncodingPickerMode.SAVE)
+                            })
+                            DropdownMenuItem(leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            }, text = {
+                                Text(
+                                    "Line break",
+                                    color = contentColor.copy(alpha = 0.8f),
+                                )
+                            }, onClick = {
+                                onShowOverflowMenuChange(false)
+                                fileMenuExpanded = false
+                                viewModel?.openLineEndingPicker()
+                            })
                             DropdownMenuItem(leadingIcon = {
                                 Icon(
                                     imageVector = Icons.Outlined.Info,
@@ -701,9 +722,7 @@ fun TopBarActions(
                             .weight(1f)
                             .fillMaxHeight()
                             .combinedClickable(
-                                onClick = {
-                                    // differed
-                                },
+                                onClick = onDocumentOptions,
                                 onLongClick = {
                                     context.copyToClipboard(
                                         "filename", title
@@ -727,9 +746,7 @@ fun TopBarActions(
                             .weight(1f)
                             .fillMaxHeight()
                             .combinedClickable(
-                                onClick = {
-                                    // differed
-                                },
+                                onClick = onDocumentOptions,
                                 onLongClick = {
                                     context.copyToClipboard(
                                         "status text", statusText

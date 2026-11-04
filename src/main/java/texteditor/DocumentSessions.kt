@@ -2,6 +2,9 @@ package texteditor
 
 import io.github.rosemoe.sora.text.Content
 import kotlinx.coroutines.Job
+import texteditor.encoding.EncodingCatalog
+import texteditor.encoding.EncodingScheme
+import texteditor.encoding.LineEnding
 
 internal class DocumentSession(
     val id: Long,
@@ -9,7 +12,10 @@ internal class DocumentSession(
     var name: String?,
     var directory: String?,
     var content: Content = Content(),
-    var encoding: String = Charsets.UTF_8.name(),
+    var encoding: EncodingScheme = EncodingCatalog.default,
+    var lineEnding: LineEnding = LineEnding.LF,
+    var originalLineEnding: LineEnding = LineEnding.LF,
+    var mixedLineEndings: Boolean = false,
     var isModified: Boolean = false,
     var isNewFile: Boolean = false,
     var languageOverride: String? = null,

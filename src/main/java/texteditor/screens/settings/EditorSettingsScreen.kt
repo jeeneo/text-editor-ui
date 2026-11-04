@@ -43,7 +43,6 @@ import texteditor.FontRegistry
 import texteditor.PRELOAD_BG_DARK
 import texteditor.SoraEditorViewModel
 import texteditor.ThemeRegistry
-import ui.PaneShadow
 import ui.SimpleShadow
 import java.io.File
 

@@ -15,6 +15,10 @@ fun FileInfoDialog(
     BaseDialog(
         onDismissRequest = onDismiss, title = "Statistics", content = {
             Column {
+                Text("Encoding: ${info.encodingLabel}")
+                Text(
+                    "Line endings: ${info.lineEndingLabel}" + if (info.mixedLineEndings) " (mixed)" else ""
+                )
                 Text("Byte count: ${info.byteCount}")
                 Text("Character count: ${info.characterCount}")
                 Text("Word count: ${info.wordCount}")

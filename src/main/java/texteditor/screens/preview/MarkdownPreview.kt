@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
 import texteditor.PRELOAD_BG_DARK
-import ui.PaneShadow
 import ui.SimpleShadow
 
 data class PreviewState(

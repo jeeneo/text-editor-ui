@@ -3,14 +3,15 @@ package texteditor
 import java.io.IOException
 import java.io.InputStream
 
-/**
- * Provider-agnostic access to the document being edited. Paths are opaque strings owned by the
- * host, so an app can supply them without sharing its file API with the editor.
- */
 fun interface TextEditorHost {
 
-    /** Persist [text] as the complete content of [path]. */
-    fun save(path: String, text: String)
+    /**
+     * Persist exactly [bytes] as the complete content of [path].
+     *
+     * The editor owns encoding (charset and BOM), so the host must write the payload as given
+     * and must not transcode or wrap it in a text writer.
+     */
+    fun save(path: String, bytes: ByteArray)
 
     fun openRead(path: String): InputStream =
         throw IOException("No read host installed for ${fileNameOf(path)}")

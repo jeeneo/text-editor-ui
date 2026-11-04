@@ -13,7 +13,6 @@ import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
-import kotlin.collections.iterator
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as TextMateThemeRegistry
 
 object EditorLanguages {

@@ -7,10 +7,16 @@ import texteditor.SoraEditorViewModel
 import texteditor.dialogs.appearance.FontChoiceDialog
 import texteditor.dialogs.appearance.ThemeChoiceDialog
 import texteditor.dialogs.close.UnsavedChangesDialog
+import texteditor.dialogs.encoding.DocumentOptionsDialog
+import texteditor.dialogs.encoding.EncodingPickerDialog
+import texteditor.dialogs.encoding.LineEndingPickerDialog
+import texteditor.dialogs.encoding.ReopenEncodingDialog
+import texteditor.dialogs.encoding.UnrepresentableCharactersDialog
 import texteditor.dialogs.info.FileInfoDialog
 import texteditor.dialogs.jump.JumpToLineDialog
 import texteditor.dialogs.language.LanguagePickerDialog
 import texteditor.dialogs.reload.ReloadFileDialog
+import texteditor.encoding.EncodingPickerMode
 
 @Composable
 fun DialogHost(
@@ -92,6 +98,45 @@ fun DialogHost(
             request = request,
             onJump = onJumpToLine,
             onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.EncodingPicker -> EncodingPickerDialog(
+            currentId = request.currentId,
+            onSelect = { schemeId -> viewModel.applyEncoding(request, schemeId) },
+            onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.LineEndingPicker -> LineEndingPickerDialog(
+            current = request.current,
+            mixed = request.mixed,
+            onSelect = { lineEnding ->
+                viewModel.setLineEnding(lineEnding)
+                controller.dismissTop()
+            },
+            onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.DocumentOptions -> DocumentOptionsDialog(
+            encodingLabel = viewModel.encodingLabel,
+            lineEndingLabel = viewModel.lineEndingLabel,
+            onEncoding = { viewModel.openEncodingPicker(EncodingPickerMode.SAVE) },
+            onLineEndings = viewModel::openLineEndingPicker,
+            onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.ConfirmReopenEncoding -> ReopenEncodingDialog(
+            documentName = request.documentName,
+            onReopen = {
+                controller.dismissTop()
+                viewModel.reopenWithEncoding(request.schemeId)
+            },
+            onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.UnrepresentableCharacters -> UnrepresentableCharactersDialog(
+            encodingLabel = request.encodingLabel,
+            onSaveAsUtf8 = viewModel::saveAsUtf8,
+            onDismiss = viewModel::cancelUnencodableSave,
         )
     }
 }
