@@ -1,6 +1,8 @@
 package texteditor.dialogs.close
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,23 +32,26 @@ fun UnsavedChangesDialog(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(24.dp))
-
             Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                 Text("Save")
             }
             Button(onClick = onMinimize, modifier = Modifier.fillMaxWidth()) {
                 Text("Minimize")
             }
-
-            TextButton(
-                onClick = onDiscard,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                ),
-            ) { Text("Discard") }
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Keep editing")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(start = 21.dp, end = 21.dp)
+            ) {
+                TextButton(
+                    onClick = onDiscard,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                ) { Text("Discard") }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text("Keep editing")
+                }
             }
         }
     }

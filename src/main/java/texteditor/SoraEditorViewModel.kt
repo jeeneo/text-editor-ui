@@ -104,7 +104,7 @@ private object EditorDefaults {
     const val INVISIBLE_CHARS = true
     const val READ_ONLY = false
     const val AUTO_COMPLETION = true
-    const val SELECTED_THEME = "darcula"
+    const val SELECTED_THEME = "default"
     const val SELECTED_FONT = "fonts/CascadiaCode-Regular.ttf"
 }
 

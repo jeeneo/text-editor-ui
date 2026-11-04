@@ -7,11 +7,13 @@ import android.content.res.Configuration
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,7 +43,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.TextFormat
 import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.filled.Title
@@ -63,6 +64,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -75,19 +77,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
+import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
+import texteditor.AppToasts
 import texteditor.R
 import texteditor.SaveButtonState
 import texteditor.SoraEditorViewModel
 import ui.theme.AppTheme
+import kotlin.math.abs
 
 class ActionHost(val inOverflow: Boolean, val dismissMenu: () -> Unit)
 typealias BarAction = @Composable ActionHost.() -> Unit
@@ -180,14 +187,27 @@ fun TopBarActions(
         positionHistory.add(offset)
         positionIndex = positionHistory.lastIndex
     }
-
+    var selected by remember(editorRef) { mutableIntStateOf(0) }
+    DisposableEffect(editorRef) {
+        val editor = editorRef ?: return@DisposableEffect onDispose { }
+        fun refreshSelection() {
+            val cursor = editor.cursor
+            selected = abs(cursor.right - cursor.left)
+        }
+        refreshSelection()
+        val receipt = editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ ->
+            refreshSelection()
+        }
+        onDispose { receipt.unsubscribe() }
+    }
     val encoding = viewModel?.encoding ?: "???"
+    val selectedText = if (selected >= 1) "($selected)  " else ""
     val statusText = if (lineCount > 0) {
-        // TODO: add selection count
-        "$cursorLine:$cursorColumn  $encoding"
+        "$cursorLine:$cursorColumn  $selectedText$encoding"
     } else {
         encoding
     }
+    val context = LocalContext.current
 
     Surface(
         modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainer
@@ -257,7 +277,6 @@ fun TopBarActions(
                         )
                     }
                 }
-                val context = LocalContext.current
                 IconButton(onClick = {
                     editMenuExpanded = true
                 }) {
@@ -285,14 +304,8 @@ fun TopBarActions(
                                 editMenuExpanded = false
                                 val editor = editorRef ?: return@copyLine
                                 val line = editor.cursor.leftLine
-                                val clipboard =
-                                    context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                        ?: return@copyLine
-                                clipboard.setPrimaryClip(
-                                    ClipData.newPlainText(
-                                        "Line ${line + 1}",
-                                        editor.text.getLineString(line),
-                                    )
+                                context.copyToClipboard(
+                                    "Line ${line + 1}", editor.text.getLineString(line)
                                 )
                             })
                         DropdownMenuItem(
@@ -307,15 +320,9 @@ fun TopBarActions(
                             onClick = cutLine@{
                                 editMenuExpanded = false
                                 val editor = editorRef ?: return@cutLine
-                                val clipboard =
-                                    context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                        ?: return@cutLine
                                 val line = editor.cursor.leftLine
-                                clipboard.setPrimaryClip(
-                                    ClipData.newPlainText(
-                                        "Line ${line + 1}",
-                                        editor.text.getLineString(line),
-                                    )
+                                context.copyToClipboard(
+                                    "Line ${line + 1}", editor.text.getLineString(line)
                                 )
                                 editor.deleteLine(line)
                             })
@@ -355,8 +362,7 @@ fun TopBarActions(
                             )
                         }, text = {
                             Text(
-                                "Replace line (clipboard)",
-                                color = contentColor.copy(alpha = 0.8f)
+                                "Replace line (paste)", color = contentColor.copy(alpha = 0.8f)
                             )
                         }, onClick = replaceLine@{
                             editMenuExpanded = false
@@ -395,7 +401,7 @@ fun TopBarActions(
                             Text(
                                 "Convert to UPPERCASE", color = contentColor.copy(alpha = 0.8f)
                             )
-                        }, onClick = uppercase@{
+                        }, onClick = {
                             editMenuExpanded = false
                             editorRef?.convertCase { it.uppercase() }
                         })
@@ -409,11 +415,11 @@ fun TopBarActions(
                             Text(
                                 "convert to lowercase", color = contentColor.copy(alpha = 0.8f)
                             )
-                        }, onClick = lowercase@{
+                        }, onClick = {
                             editMenuExpanded = false
                             editorRef?.convertCase { it.lowercase() }
                         })
-                        DropdownMenuItem(leadingIcon = {
+                        LongClickMenuItem(leadingIcon = {
                             Icon(
                                 painter = painterResource(R.drawable.text_icon_altercase),
                                 contentDescription = null,
@@ -421,25 +427,27 @@ fun TopBarActions(
                             )
                         }, text = {
                             Text(
-                                "Convert to aLtErNaTiNg case",
-                                color = contentColor.copy(alpha = 0.8f)
+                                "Convert to aLtErNaTiNg", color = contentColor.copy(alpha = 0.8f)
                             )
-                        }, onClick = alternating@{
+                        }, onClick = {
                             editMenuExpanded = false
                             editorRef?.convertCase { it.toAlternatingCase() }
+                        }, onLongClick = {
+                            editMenuExpanded = false
+                            AppToasts.show(context, "done")
+                            editorRef?.convertCase { it.uppercase().replace("I", "i") }
                         })
                         DropdownMenuItem(leadingIcon = {
                             Icon(
-                                imageVector = Icons.Filled.SwapVert,
+                                painter = painterResource(R.drawable.text_icon_caseinvert),
                                 contentDescription = null,
                                 tint = contentColor.copy(alpha = 0.5f),
                             )
                         }, text = {
                             Text(
-                                "Invert case",
-                                color = contentColor.copy(alpha = 0.8f)
+                                "Invert case", color = contentColor.copy(alpha = 0.8f)
                             )
-                        }, onClick = invertCase@{
+                        }, onClick = {
                             editMenuExpanded = false
                             editorRef?.convertCase { it.toInvertedCase() }
                         })
@@ -451,10 +459,9 @@ fun TopBarActions(
                             )
                         }, text = {
                             Text(
-                                "Convert to Title case",
-                                color = contentColor.copy(alpha = 0.8f)
+                                "Convert To Title Case", color = contentColor.copy(alpha = 0.8f)
                             )
-                        }, onClick = titleCase@{
+                        }, onClick = {
                             editMenuExpanded = false
                             editorRef?.convertCase { it.toTitleCase() }
                         })
@@ -466,8 +473,7 @@ fun TopBarActions(
                             )
                         }, text = {
                             Text(
-                                "Convert to Sentence case",
-                                color = contentColor.copy(alpha = 0.8f)
+                                "Convert to sentence case", color = contentColor.copy(alpha = 0.8f)
                             )
                         }, onClick = sentenceCase@{
                             editMenuExpanded = false
@@ -694,6 +700,16 @@ fun TopBarActions(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .combinedClickable(
+                                onClick = {
+                                    // differed
+                                },
+                                onLongClick = {
+                                    context.copyToClipboard(
+                                        "filename", title
+                                    )
+                                },
+                            )
                             .padding(start = 14.dp),
                         horizontalAlignment = Alignment.Start,
                         verticalArrangement = Arrangement.Center
@@ -710,6 +726,16 @@ fun TopBarActions(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .combinedClickable(
+                                onClick = {
+                                    // differed
+                                },
+                                onLongClick = {
+                                    context.copyToClipboard(
+                                        "status text", statusText
+                                    )
+                                },
+                            )
                             .padding(end = 14.dp),
                         horizontalAlignment = Alignment.End,
                         verticalArrangement = Arrangement.Center
@@ -881,4 +907,42 @@ private fun CodeEditor.deleteLine(line: Int) {
     }
     val end = if (hasNext) content.getCharIndex(line + 1, 0) else content.length
     content.replace(start, end, "")
+}
+
+@Composable
+private fun LongClickMenuItem(
+    text: @Composable () -> Unit,
+    leadingIcon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                },
+            )
+            .defaultMinSize(minWidth = 112.dp, minHeight = 48.dp)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        leadingIcon()
+        text()
+    }
+}
+
+private fun Context.copyToClipboard(label: String, text: String) {
+    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+    @Suppress("UsePropertyAccessSyntax") clipboard.setPrimaryClip(
+        ClipData.newPlainText(
+            label,
+            text
+        )
+    )
 }
