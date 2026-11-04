@@ -132,6 +132,7 @@ class SoraEditorViewModel(
     private var editGrammarJob: Job? = null
     private val prefs get() = getApplication<Application>().editorPrefs
     private var openStartedAt = 0L
+    private var saveCopyInProgress = false
 
     private val activeSession: DocumentSession?
         get() = DocumentSessions.active
@@ -703,6 +704,44 @@ class SoraEditorViewModel(
                 onError(e.localizedMessage ?: "Write error")
             } finally {
                 session.isSaving = false
+            }
+        }
+    }
+
+    /**
+     * Writes [getText] to a new file that the user picks. The document and its file are left
+     * untouched, so unsaved changes only ever reach the copy.
+     */
+    fun saveCopyAs(
+        getText: () -> String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit,
+    ) {
+        val session = activeSession
+        if (session == null) {
+            onError("No document open")
+            return
+        }
+        if (saveCopyInProgress) return
+        saveCopyInProgress = true
+        viewModelScope.launch {
+            try {
+                val text = getText()
+                val suggestedName = session.name
+                    ?: session.path?.let(::fileNameOf)
+                    ?: NEW_FILE_NAME
+                val initialDirectory = session.path?.let(::parentOf) ?: session.directory
+                val target = host.saveAs(suggestedName, initialDirectory) ?: return@launch
+                withContext(Dispatchers.IO) {
+                    host.save(target, text)
+                }
+                onSuccess()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Write error")
+            } finally {
+                saveCopyInProgress = false
             }
         }
     }

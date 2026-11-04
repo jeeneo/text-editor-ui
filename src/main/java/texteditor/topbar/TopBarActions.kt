@@ -138,6 +138,7 @@ fun TopBarActions(
     viewModel: SoraEditorViewModel? = null,
     saveButtonState: MutableState<SaveButtonState> = remember { mutableStateOf(SaveButtonState.IDLE) },
     onSave: () -> Unit = {},
+    onSaveAs: () -> Unit = {},
     onPreview: () -> Unit = {},
     canUndo: MutableState<Boolean> = remember { mutableStateOf(false) },
     canRedo: MutableState<Boolean> = remember { mutableStateOf(false) },
@@ -459,7 +460,10 @@ fun TopBarActions(
                             )
                         },
                         text = { Text("Save as", color = contentColor.copy(alpha = 0.8f)) },
-                        onClick = { })
+                        onClick = {
+                            fileMenuExpanded = false
+                            onSaveAs()
+                        })
                     DropdownMenuItem(
                         leadingIcon = {
                             Icon(

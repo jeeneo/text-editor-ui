@@ -31,8 +31,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
@@ -41,6 +39,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,14 +114,13 @@ fun TextEditorScreen(
     var cursorColumn by remember { mutableIntStateOf(1) }
     var lineCount by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf(initialSearchQuery) }
-    var shownDocumentId by remember { mutableStateOf(viewModel.activeDocumentId) }
+    var shownDocumentId by remember { mutableLongStateOf(viewModel.activeDocumentId) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val displayPath = viewModel.savedPath
     val typefaceToLoad = remember(viewModel.selectedFont) {
         FontRegistry.loadTypeface(context, viewModel.selectedFont)
     }
     val saveButtonState = remember { mutableStateOf(SaveButtonState.IDLE) }
-    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(saveButtonState.value) {
@@ -153,7 +151,21 @@ fun TextEditorScreen(
             onError = { message ->
                 saveButtonState.value = SaveButtonState.ERROR
                 scope.launch {
-                    snackbarHostState.showSnackbar("Couldn't save: $message")
+                    AppToasts.show(context, message)
+                }
+            },
+        )
+    }
+
+    fun saveCopyAsFile() {
+        viewModel.saveCopyAs(
+            getText = { editorRef?.text?.toString() ?: viewModel.content.toString() },
+            onSuccess = {
+                AppToasts.show(context, "Saved copy")
+            },
+            onError = { message ->
+                scope.launch {
+                    AppToasts.show(context, message)
                 }
             },
         )
@@ -170,7 +182,7 @@ fun TextEditorScreen(
             onError = { message ->
                 saveButtonState.value = SaveButtonState.ERROR
                 scope.launch {
-                    snackbarHostState.showSnackbar("Couldn't save: $message")
+                    AppToasts.show(context, message)
                 }
             },
             id = id,
@@ -378,7 +390,6 @@ fun TextEditorScreen(
             Scaffold(
                 modifier = Modifier.offset(x = editorOffset),
                 contentWindowInsets = WindowInsets.ime,
-                snackbarHost = { SnackbarHost(snackbarHostState) },
                 topBar = {
                     TopBarActions(
                         title = title,
@@ -389,6 +400,7 @@ fun TextEditorScreen(
                         viewModel = viewModel,
                         saveButtonState = saveButtonState,
                         onSave = ::saveFile,
+                        onSaveAs = ::saveCopyAsFile,
                         onPreview = {
                             viewModel.openPreview(
                                 editorRef?.text?.toString() ?: viewModel.content.toString()
