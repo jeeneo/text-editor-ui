@@ -14,7 +14,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.content.edit
 import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.AndroidViewModel
@@ -33,11 +32,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import texteditor.dialogs.data.DialogController
+import texteditor.dialogs.data.DialogRequest
 import java.io.BufferedInputStream
 import java.io.IOException
 import java.nio.charset.Charset
-import texteditor.dialogs.data.DialogController
-import texteditor.dialogs.data.DialogRequest
 import kotlin.time.Duration.Companion.milliseconds
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as EditorThemeRegistry
 
@@ -302,6 +301,15 @@ class SoraEditorViewModel(
 
     fun openLanguageDialog(detectedScope: String?) {
         dialogs.show(DialogRequest.Language(detectedScope))
+    }
+
+    fun openJumpToLineDialog(currentLine: Int, lineCount: Int) {
+        dialogs.show(
+            DialogRequest.JumpToLine(
+                currentLine,
+                lineCount
+            )
+        )
     }
 
     fun openReloadDialog() {

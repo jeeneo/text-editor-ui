@@ -8,6 +8,7 @@ import texteditor.dialogs.appearance.FontChoiceDialog
 import texteditor.dialogs.appearance.ThemeChoiceDialog
 import texteditor.dialogs.close.UnsavedChangesDialog
 import texteditor.dialogs.info.FileInfoDialog
+import texteditor.dialogs.jump.JumpToLineDialog
 import texteditor.dialogs.language.LanguagePickerDialog
 import texteditor.dialogs.preview.MarkdownPreviewDialog
 import texteditor.dialogs.reload.ReloadFileDialog
@@ -18,6 +19,7 @@ fun DialogHost(
     onSaveAndClose: (Long) -> Unit,
     onMinimize: () -> Unit,
     onNothingLeft: () -> Unit,
+    onJumpToLine: (Int) -> Unit,
 ) {
     val controller = viewModel.dialogs
     val request = controller.requests.lastOrNull() ?: return
@@ -84,6 +86,12 @@ fun DialogHost(
 
         is DialogRequest.FileInfo -> FileInfoDialog(
             info = request,
+            onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.JumpToLine -> JumpToLineDialog(
+            request = request,
+            onJump = onJumpToLine,
             onDismiss = controller::dismissTop,
         )
 

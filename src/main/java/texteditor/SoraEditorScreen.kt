@@ -359,6 +359,13 @@ fun TextEditorScreen(
         },
         onMinimize = ::minimize,
         onNothingLeft = onNavigateUp,
+        onJumpToLine = { line ->
+            val editor = editorRef
+            if (editor != null) {
+                val target = (line - 1).coerceIn(0, (editor.text.lineCount - 1).coerceAtLeast(0))
+                editor.setSelection(target, 0, true)
+            }
+        },
     )
 
     val title = buildString {

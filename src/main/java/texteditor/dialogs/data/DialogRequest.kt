@@ -22,6 +22,11 @@ sealed interface DialogRequest {
 
     data object Reload : DialogRequest
 
+    data class JumpToLine(
+        val currentLine: Int,
+        val lineCount: Int,
+    ) : DialogRequest
+
     data class FileInfo(
         val byteCount: Long,
         val characterCount: Int,

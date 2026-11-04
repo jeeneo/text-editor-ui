@@ -41,7 +41,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.TextFormat
 import androidx.compose.material.icons.filled.TextIncrease
+import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Info
@@ -60,8 +63,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -157,6 +163,23 @@ fun TopBarActions(
 ) {
     var fileMenuExpanded by remember { mutableStateOf(false) }
     var editMenuExpanded by remember { mutableStateOf(false) }
+    val positionHistory = remember(editorRef) { mutableStateListOf<Int>() }
+    var positionIndex by remember(editorRef) { mutableIntStateOf(-1) }
+    fun showPosition(offset: Int) {
+        val editor = editorRef ?: return
+        val position = editor.text.indexer.getCharPosition(offset.coerceIn(0, editor.text.length))
+        editor.setSelection(position.line, position.column, true)
+    }
+    LaunchedEffect(editorRef, cursorLine) {
+        val editor = editorRef ?: return@LaunchedEffect
+        val offset = editor.cursor.left
+        if (offset == positionHistory.getOrNull(positionIndex)) return@LaunchedEffect
+        while (positionHistory.size > positionIndex + 1) {
+            positionHistory.removeAt(positionHistory.lastIndex)
+        }
+        positionHistory.add(offset)
+        positionIndex = positionHistory.lastIndex
+    }
 
     val encoding = viewModel?.encoding ?: "???"
     val statusText = if (lineCount > 0) {
@@ -245,6 +268,9 @@ fun TopBarActions(
                     DropdownMenu(
                         expanded = editMenuExpanded,
                         containerColor = MaterialTheme.colorScheme.onSecondary,
+                        properties = PopupProperties(
+                            focusable = false, dismissOnBackPress = false
+                        ),
                         onDismissRequest = { editMenuExpanded = false }) {
                         DropdownMenuItem(
                             leadingIcon = {
@@ -402,6 +428,51 @@ fun TopBarActions(
                             editMenuExpanded = false
                             editorRef?.convertCase { it.toAlternatingCase() }
                         })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.SwapVert,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Invert case",
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = invertCase@{
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.toInvertedCase() }
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Title,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Convert to Title case",
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = titleCase@{
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.toTitleCase() }
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.TextFormat,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Convert to Sentence case",
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = sentenceCase@{
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.toSentenceCase() }
+                        })
                     }
                 }
                 val isReadOnly = viewModel?.readOnly == true
@@ -434,9 +505,39 @@ fun TopBarActions(
                             "Syntax", Icons.Outlined.Code, closesMenu = true
                         ) { onShowLanguagePicker() }
                     },
-                    { ActionItem("Previous position", Icons.AutoMirrored.Outlined.ArrowBack) },
-                    { ActionItem("Next position", Icons.AutoMirrored.Outlined.ArrowForward) },
-                    { ActionItem("Jump to line", Icons.AutoMirrored.Outlined.ShortText) },
+                    {
+                        ActionItem(
+                            "Previous position",
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            enabled = positionIndex > 0,
+                            closesMenu = true,
+                        ) {
+                            if (positionIndex > 0) {
+                                positionIndex--
+                                showPosition(positionHistory[positionIndex])
+                            }
+                        }
+                    },
+                    {
+                        ActionItem(
+                            "Next position",
+                            Icons.AutoMirrored.Outlined.ArrowForward,
+                            enabled = positionIndex < positionHistory.lastIndex,
+                            closesMenu = true,
+                        ) {
+                            if (positionIndex < positionHistory.lastIndex) {
+                                positionIndex++
+                                showPosition(positionHistory[positionIndex])
+                            }
+                        }
+                    },
+                    {
+                        ActionItem(
+                            "Jump to line",
+                            Icons.AutoMirrored.Outlined.ShortText,
+                            closesMenu = true,
+                        ) { viewModel?.openJumpToLineDialog(cursorLine, lineCount) }
+                    },
                     {
                         ToggleItem(
                             "Word wrap",
@@ -483,94 +584,100 @@ fun TopBarActions(
                         ) {
                             overflow.forEach { action -> menuHost.action() }
                         }
+                        DropdownMenu(
+                            expanded = fileMenuExpanded,
+                            containerColor = MaterialTheme.colorScheme.onSecondary,
+                            properties = PopupProperties(
+                                focusable = false, dismissOnBackPress = false
+                            ),
+                            onDismissRequest = { fileMenuExpanded = false }) {
+                            Text(
+                                modifier = Modifier.padding(
+                                    start = 12.dp, top = 8.dp, bottom = 8.dp
+                                ),
+                                color = contentColor.copy(alpha = 0.8f),
+                                text = "File",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Save,
+                                        contentDescription = null,
+                                        tint = contentColor.copy(alpha = 0.5f),
+                                    )
+                                },
+                                text = { Text("Save as", color = contentColor.copy(alpha = 0.8f)) },
+                                onClick = {
+                                    fileMenuExpanded = false
+                                    onSaveAs()
+                                })
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Refresh,
+                                        contentDescription = null,
+                                        tint = contentColor.copy(alpha = 0.5f),
+                                    )
+                                },
+                                text = { Text("Reload", color = contentColor.copy(alpha = 0.8f)) },
+                                onClick = {
+                                    fileMenuExpanded = false
+                                    onReload()
+                                })
+//                            encoding/etc differed
+//                            DropdownMenuItem(leadingIcon = {
+//                                Icon(
+//                                    imageVector = Icons.AutoMirrored.Filled.RotateRight,
+//                                    modifier = Modifier.rotate(45f),
+//                                    contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+//                                )
+//                            }, text = {
+//                                Text(
+//                                    "Reload with charset",
+//                                    color = contentColor.copy(alpha = 0.8f),
+//                                )
+//                            }, onClick = { })
+//                            DropdownMenuItem(leadingIcon = {
+//                                Icon(
+//                                    imageVector = Icons.Filled.FormatSize,
+//                                    contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+//                                )
+//                            }, text = {
+//                                Text(
+//                                    "Set the saved encoding",
+//                                    color = contentColor.copy(alpha = 0.8f),
+//                                )
+//                            }, onClick = { })
+//                            DropdownMenuItem(leadingIcon = {
+//                                Icon(
+//                                    imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
+//                                    contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+//                                )
+//                            }, text = {
+//                                Text(
+//                                    "Linebreak",
+//                                    color = contentColor.copy(alpha = 0.8f),
+//                                )
+//                            }, onClick = { })
+                            DropdownMenuItem(leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            }, text = {
+                                Text(
+                                    "Statistics",
+                                    color = contentColor.copy(alpha = 0.8f),
+                                )
+                            }, onClick = {
+                                onShowOverflowMenuChange(false)
+                                fileMenuExpanded = false
+                                onFileInfo()
+                            })
+                        }
                     }
-                }
-                DropdownMenu(
-                    expanded = fileMenuExpanded,
-                    containerColor = MaterialTheme.colorScheme.onSecondary,
-                    onDismissRequest = { fileMenuExpanded = false }) {
-                    Text(
-                        modifier = Modifier.padding(
-                            start = 12.dp, top = 8.dp, bottom = 8.dp
-                        ),
-                        color = contentColor.copy(alpha = 0.8f),
-                        text = "File",
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                    DropdownMenuItem(
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Filled.Save,
-                                contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-                            )
-                        },
-                        text = { Text("Save as", color = contentColor.copy(alpha = 0.8f)) },
-                        onClick = {
-                            fileMenuExpanded = false
-                            onSaveAs()
-                        })
-                    DropdownMenuItem(
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-                            )
-                        },
-                        text = { Text("Reload", color = contentColor.copy(alpha = 0.8f)) },
-                        onClick = {
-                            fileMenuExpanded = false
-                            onReload()
-                        })
-//                    encoding/etc differed
-//                    DropdownMenuItem(leadingIcon = {
-//                        Icon(
-//                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
-//                            modifier = Modifier.rotate(45f),
-//                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-//                        )
-//                    }, text = {
-//                        Text(
-//                            "Reload with charset",
-//                            color = contentColor.copy(alpha = 0.8f),
-//                        )
-//                    }, onClick = { })
-//                    DropdownMenuItem(leadingIcon = {
-//                        Icon(
-//                            imageVector = Icons.Filled.FormatSize,
-//                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-//                        )
-//                    }, text = {
-//                        Text(
-//                            "Set the saved encoding",
-//                            color = contentColor.copy(alpha = 0.8f),
-//                        )
-//                    }, onClick = { })
-//                    DropdownMenuItem(leadingIcon = {
-//                        Icon(
-//                            imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
-//                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-//                        )
-//                    }, text = {
-//                        Text(
-//                            "Linebreak",
-//                            color = contentColor.copy(alpha = 0.8f),
-//                        )
-//                    }, onClick = { })
-                    DropdownMenuItem(leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-                        )
-                    }, text = {
-                        Text(
-                            "Statistics",
-                            color = contentColor.copy(alpha = 0.8f),
-                        )
-                    }, onClick = {
-                        onShowOverflowMenuChange(false)
-                        fileMenuExpanded = false
-                        onFileInfo()
-                    })
                 }
             }
             Column(
@@ -661,9 +768,77 @@ private fun CodeEditor.convertCase(transform: (String) -> String) {
     content.replace(start, end, transform(content.subSequence(start, end).toString()))
 }
 
-private fun String.toAlternatingCase(): String {
+private fun String.toTitleCase(): String {
     val builder = StringBuilder(length)
-    var upper = false
+    var atWordStart = true
+    for (char in this) {
+        when {
+            char.isLetter() -> {
+                builder.append(if (atWordStart) char.uppercaseChar() else char.lowercaseChar())
+                atWordStart = false
+            }
+
+            // An apostrophe stays inside the word, so "don't" becomes "Don't".
+            char == '\'' -> builder.append(char)
+
+            else -> {
+                builder.append(char)
+                atWordStart = !char.isDigit()
+            }
+        }
+    }
+    return builder.toString()
+}
+
+private fun String.toSentenceCase(): String {
+    val builder = StringBuilder(length)
+    var atSentenceStart = true
+    for (char in this) {
+        when {
+            char.isLetter() -> {
+                builder.append(
+                    if (atSentenceStart) char.uppercaseChar() else char.lowercaseChar()
+                )
+                atSentenceStart = false
+            }
+
+            char.isDigit() -> {
+                builder.append(char)
+                atSentenceStart = false
+            }
+
+            else -> {
+                builder.append(char)
+                if (char == '.' || char == '!' || char == '?' || char == '\n') {
+                    atSentenceStart = true
+                }
+            }
+        }
+    }
+    return builder.toString()
+}
+
+private fun String.toInvertedCase(): String {
+    val builder = StringBuilder(length)
+    for (char in this) {
+        builder.append(
+            when {
+                char.isUpperCase() -> char.lowercaseChar()
+                char.isLowerCase() -> char.uppercaseChar()
+                else -> char
+            }
+        )
+    }
+    return builder.toString()
+}
+
+private fun String.toAlternatingCase(): String =
+    if (this == alternate(startUpper = false)) alternate(startUpper = true)
+    else alternate(startUpper = false)
+
+private fun String.alternate(startUpper: Boolean): String {
+    val builder = StringBuilder(length)
+    var upper = startUpper
     for (char in this) {
         builder.append(
             when {
