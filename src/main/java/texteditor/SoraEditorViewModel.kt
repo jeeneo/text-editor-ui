@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.IOException
+import java.nio.charset.Charset
 import texteditor.dialogs.data.DialogController
 import texteditor.dialogs.data.DialogRequest
 import kotlin.time.Duration.Companion.milliseconds
@@ -313,6 +314,39 @@ class SoraEditorViewModel(
         dialogs.show(DialogRequest.Reload)
     }
 
+    fun openFileInfo(text: CharSequence) {
+        val snapshot = text.toString()
+        val charset = runCatching { Charset.forName(encoding) }.getOrDefault(Charsets.UTF_8)
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.Default) {
+                var words = 0
+                var lines = 1
+                var inWord = false
+                for (char in snapshot) {
+                    when {
+                        char == '\n' -> {
+                            lines++
+                            inWord = false
+                        }
+
+                        char.isWhitespace() -> inWord = false
+                        !inWord -> {
+                            words++
+                            inWord = true
+                        }
+                    }
+                }
+                DialogRequest.FileInfo(
+                    byteCount = snapshot.toByteArray(charset).size.toLong(),
+                    characterCount = snapshot.length,
+                    wordCount = words,
+                    lineCount = lines,
+                )
+            }
+            dialogs.show(info)
+        }
+    }
+
     fun openPreview(markdown: String) {
         val session = activeSession ?: return
         dialogs.show(
@@ -563,10 +597,10 @@ class SoraEditorViewModel(
         savePrefs()
     }
 
-    fun toggleAutoCompletion() {
-        autoCompletion = !autoCompletion
-        savePrefs()
-    }
+//    fun toggleAutoCompletion() {
+//        autoCompletion = !autoCompletion
+//        savePrefs()
+//    }
 
     fun setFont(font: String) {
         selectedFont = font

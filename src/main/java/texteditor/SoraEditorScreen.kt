@@ -411,6 +411,11 @@ fun TextEditorScreen(
                         onSave = ::saveFile,
                         onSaveAs = ::saveCopyAsFile,
                         onReload = { viewModel.openReloadDialog() },
+                        onFileInfo = {
+                            viewModel.openFileInfo(
+                                editorRef?.text?.toString() ?: viewModel.content.toString()
+                            )
+                        },
                         onPreview = {
                             viewModel.openPreview(
                                 editorRef?.text?.toString() ?: viewModel.content.toString()

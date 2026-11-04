@@ -22,6 +22,13 @@ sealed interface DialogRequest {
 
     data object Reload : DialogRequest
 
+    data class FileInfo(
+        val byteCount: Long,
+        val characterCount: Int,
+        val wordCount: Int,
+        val lineCount: Int,
+    ) : DialogRequest
+
     /** Shows [markdown] as rendered HTML, resolved against [baseUrl]. */
     data class Preview(
         val markdown: String,

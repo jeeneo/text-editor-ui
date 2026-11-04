@@ -7,6 +7,7 @@ import texteditor.SoraEditorViewModel
 import texteditor.dialogs.appearance.FontChoiceDialog
 import texteditor.dialogs.appearance.ThemeChoiceDialog
 import texteditor.dialogs.close.UnsavedChangesDialog
+import texteditor.dialogs.info.FileInfoDialog
 import texteditor.dialogs.language.LanguagePickerDialog
 import texteditor.dialogs.preview.MarkdownPreviewDialog
 import texteditor.dialogs.reload.ReloadFileDialog
@@ -78,6 +79,11 @@ fun DialogHost(
                 controller.dismissTop()
                 viewModel.reloadOpen()
             },
+            onDismiss = controller::dismissTop,
+        )
+
+        is DialogRequest.FileInfo -> FileInfoDialog(
+            info = request,
             onDismiss = controller::dismissTop,
         )
 

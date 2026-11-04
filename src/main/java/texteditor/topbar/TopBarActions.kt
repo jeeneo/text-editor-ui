@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.automirrored.filled.Redo
-import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -33,7 +31,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
@@ -140,6 +137,7 @@ fun TopBarActions(
     onSave: () -> Unit = {},
     onSaveAs: () -> Unit = {},
     onReload: () -> Unit = {},
+    onFileInfo: () -> Unit = {},
     onPreview: () -> Unit = {},
     canUndo: MutableState<Boolean> = remember { mutableStateOf(false) },
     canRedo: MutableState<Boolean> = remember { mutableStateOf(false) },
@@ -477,40 +475,41 @@ fun TopBarActions(
                             fileMenuExpanded = false
                             onReload()
                         })
-                    DropdownMenuItem(leadingIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
-                            modifier = Modifier.rotate(45f),
-                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-                        )
-                    }, text = {
-                        Text(
-                            "Reload with charset",
-                            color = contentColor.copy(alpha = 0.8f),
-                        )
-                    }, onClick = { })
-                    DropdownMenuItem(leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.FormatSize,
-                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-                        )
-                    }, text = {
-                        Text(
-                            "Set the saved encoding",
-                            color = contentColor.copy(alpha = 0.8f),
-                        )
-                    }, onClick = { })
-                    DropdownMenuItem(leadingIcon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
-                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
-                        )
-                    }, text = {
-                        Text(
-                            "Linebreak",
-                            color = contentColor.copy(alpha = 0.8f),
-                        )
-                    }, onClick = { })
+//                    encoding/etc differed
+//                    DropdownMenuItem(leadingIcon = {
+//                        Icon(
+//                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
+//                            modifier = Modifier.rotate(45f),
+//                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+//                        )
+//                    }, text = {
+//                        Text(
+//                            "Reload with charset",
+//                            color = contentColor.copy(alpha = 0.8f),
+//                        )
+//                    }, onClick = { })
+//                    DropdownMenuItem(leadingIcon = {
+//                        Icon(
+//                            imageVector = Icons.Filled.FormatSize,
+//                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+//                        )
+//                    }, text = {
+//                        Text(
+//                            "Set the saved encoding",
+//                            color = contentColor.copy(alpha = 0.8f),
+//                        )
+//                    }, onClick = { })
+//                    DropdownMenuItem(leadingIcon = {
+//                        Icon(
+//                            imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
+//                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+//                        )
+//                    }, text = {
+//                        Text(
+//                            "Linebreak",
+//                            color = contentColor.copy(alpha = 0.8f),
+//                        )
+//                    }, onClick = { })
                     DropdownMenuItem(leadingIcon = {
                         Icon(
                             imageVector = Icons.Outlined.Info,
@@ -518,10 +517,14 @@ fun TopBarActions(
                         )
                     }, text = {
                         Text(
-                            "File info",
+                            "Statistics",
                             color = contentColor.copy(alpha = 0.8f),
                         )
-                    }, onClick = { })
+                    }, onClick = {
+                        onShowOverflowMenuChange(false)
+                        fileMenuExpanded = false
+                        onFileInfo()
+                    })
                 }
             }
             Column(
