@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveRedEye
@@ -64,6 +65,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults.contentColor
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -441,7 +443,7 @@ fun TopBarActions(
                             editorRef?.convertCase { it.toAlternatingCase() }
                         }, onLongClick = {
                             editMenuExpanded = false
-                            AppToasts.show(context, "done")
+                            AppToasts.show(context, "it has been done")
                             editorRef?.convertCase { it.uppercase().replace("I", "i") }
                         })
                         DropdownMenuItem(leadingIcon = {
@@ -485,6 +487,20 @@ fun TopBarActions(
                         }, onClick = sentenceCase@{
                             editMenuExpanded = false
                             editorRef?.convertCase { it.toSentenceCase() }
+                        })
+                        DropdownMenuItem(leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Numbers,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        }, text = {
+                            Text(
+                                "Numbers to words", color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }, onClick = {
+                            editMenuExpanded = false
+                            editorRef?.convertCase { it.numbersToWords() }
                         })
                     }
                 }
@@ -950,7 +966,9 @@ private fun LongClickMenuItem(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         leadingIcon()
-        text()
+        ProvideTextStyle(MaterialTheme.typography.labelLarge) {
+            text()
+        }
     }
 }
 
@@ -958,8 +976,63 @@ private fun Context.copyToClipboard(label: String, text: String) {
     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
     @Suppress("UsePropertyAccessSyntax") clipboard.setPrimaryClip(
         ClipData.newPlainText(
-            label,
-            text
+            label, text
         )
     )
+}
+
+private val ONES = arrayOf(
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen",
+)
+private val TENS = arrayOf(
+    "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+)
+private val SCALES = arrayOf(
+    "", "thousand", "million", "billion", "trillion", "quadrillion", "quintillion",
+    "sextillion", "septillion", "octillion", "nonillion", "decillion",
+)
+
+private val NUMBER_REGEX = Regex("""\d+(?:\.\d+)?""")
+
+private fun String.numbersToWords(): String = NUMBER_REGEX.replace(this) { match ->
+    val intPart = match.value.substringBefore('.')
+    val fracPart = match.value.substringAfter('.', "")
+    val words = digitsToWords(intPart)
+    if (fracPart.isEmpty()) words
+    else "$words point " + fracPart.map { ONES[it - '0'] }.joinToString(" ")
+}
+
+private fun digitsToWords(digits: String): String {
+    val trimmed = digits.trimStart('0')
+    if (trimmed.isEmpty()) return "zero"
+    if (trimmed.length > SCALES.size * 3) {
+        return trimmed.map { ONES[it - '0'] }.joinToString(" ")
+    }
+    val groups = trimmed.reversed().chunked(3).map { it.reversed().toInt() }
+    val parts = mutableListOf<String>()
+    for (i in groups.indices.reversed()) {
+        if (groups[i] == 0) continue
+        val words = threeDigitsToWords(groups[i])
+        parts += if (SCALES[i].isEmpty()) words else "$words ${SCALES[i]}"
+    }
+    return parts.joinToString(" ")
+}
+
+private fun threeDigitsToWords(n: Int): String {
+    val parts = mutableListOf<String>()
+    val hundreds = n / 100
+    val rest = n % 100
+    if (hundreds > 0) parts += "${ONES[hundreds]} hundred"
+    if (rest > 0) {
+        parts += if (rest < 20) {
+            ONES[rest]
+        } else {
+            val tens = TENS[rest / 10]
+            val ones = rest % 10
+            if (ones == 0) tens else "$tens-${ONES[ones]}"
+        }
+    }
+    return parts.joinToString(" ")
 }

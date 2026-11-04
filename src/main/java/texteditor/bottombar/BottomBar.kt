@@ -63,7 +63,8 @@ private val BaseExpandedBarHeight = 142.dp
 private val BaseSymbolWidth = 50.dp
 private val BaseSymbolHeight = 35.dp
 private val BaseTabStripHeight = 32.dp
-//private val BarColor = Color(0xFF2A2A2A)
+
+val BarColor = Color(0xFF2A2A2A)
 
 @Immutable
 private class BarMetrics(widthFactor: Float, heightFactor: Float) {
@@ -141,6 +142,7 @@ fun SymbolInputBar(
     Surface(
         modifier = modifier.fillMaxWidth(),
         tonalElevation = 2.dp,
+        color = BarColor,
     ) {
         Column(
             modifier = Modifier
