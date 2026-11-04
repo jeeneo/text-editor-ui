@@ -16,24 +16,35 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.automirrored.outlined.ShortText
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.CopyAll
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Copyright
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Checkbox
@@ -43,29 +54,79 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItemDefaults.contentColor
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
+import io.github.rosemoe.sora.widget.CodeEditor
+import texteditor.R
 import texteditor.SaveButtonState
 import texteditor.SoraEditorViewModel
-import texteditor.TopBarAction
 import ui.theme.AppTheme
-import io.github.rosemoe.sora.widget.CodeEditor
-import ui.SimpleShadow
+
+class ActionHost(val inOverflow: Boolean, val dismissMenu: () -> Unit)
+typealias BarAction = @Composable ActionHost.() -> Unit
+
+@Composable
+fun ActionHost.ActionItem(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    closesMenu: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit = {},
+) {
+    if (inOverflow) {
+        DropdownMenuItem(
+            text = { Text(label, color = contentColor.copy(alpha = 0.8f)) },
+            leadingIcon = {
+                Icon(
+                    icon, contentDescription = null, tint = contentColor.copy(alpha = 0.5f)
+                )
+            },
+            trailingIcon = trailing,
+            enabled = enabled,
+            onClick = {
+                onClick()
+                if (closesMenu) dismissMenu()
+            },
+        )
+    } else {
+        IconButton(onClick = onClick, enabled = enabled) {
+            Icon(icon, contentDescription = label, tint = contentColor.copy(alpha = 0.5f))
+        }
+    }
+}
+
+@Composable
+fun ActionHost.ToggleItem(
+    label: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) = ActionItem(
+    label, icon,
+    trailing = { Checkbox(checked = checked, onCheckedChange = null) },
+    onClick = onToggle,
+)
 
 @Composable
 fun TopBarActions(
@@ -90,10 +151,13 @@ fun TopBarActions(
     onCloseFile: () -> Unit = {},
     onShowLanguagePicker: () -> Unit = {},
 ) {
+    var fileMenuExpanded by remember { mutableStateOf(false) }
+    var editMenuExpanded by remember { mutableStateOf(false) }
 
     val encoding = viewModel?.encoding ?: "???"
     val statusText = if (lineCount > 0) {
-        "$cursorLine:$cursorColumn / $lineCount  $encoding"
+        // TODO: add selection count
+        "$cursorLine:$cursorColumn  $encoding"
     } else {
         encoding
     }
@@ -166,52 +230,190 @@ fun TopBarActions(
                         )
                     }
                 }
-                IconButton(onClick = { }) {
+                IconButton(onClick = {
+                    editMenuExpanded = true
+                }) {
                     Icon(
                         imageVector = Icons.Filled.Edit,
                         contentDescription = "",
                     )
+                    DropdownMenu(
+                        expanded = editMenuExpanded,
+                        containerColor = MaterialTheme.colorScheme.onSecondary,
+                        onDismissRequest = { editMenuExpanded = false }) {
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.CopyAll,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = { Text("Copy line", color = contentColor.copy(alpha = 0.8f)) },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentCut,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = { Text("Cut line", color = contentColor.copy(alpha = 0.8f)) },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = { Text("Delete line", color = contentColor.copy(alpha = 0.8f)) },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.DeleteSweep,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = { Text("Clear line", color = contentColor.copy(alpha = 0.8f)) },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentPaste,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "Replace line (clipboard)",
+                                    color = contentColor.copy(alpha = 0.8f)
+                                )
+                            },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.TextIncrease,
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "Duplicate line",
+                                    color = contentColor.copy(alpha = 0.8f)
+                                )
+                            },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.text_icon_uppercase),
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "Convert to UPPERCASE",
+                                    color = contentColor.copy(alpha = 0.8f)
+                                )
+                            },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.text_icon_lowercase),
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "convert to lowercase",
+                                    color = contentColor.copy(alpha = 0.8f)
+                                )
+                            },
+                            onClick = { })
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.text_icon_altercase),
+                                    contentDescription = null,
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            },
+                            text = {
+                                Text(
+                                    "Convert to aLtErNaTiNg case",
+                                    color = contentColor.copy(alpha = 0.8f)
+                                )
+                            },
+                            onClick = { })
+                    }
                 }
                 val isReadOnly = viewModel?.readOnly == true
-                val flexibleActions = listOf(
-                    TopBarAction("File", Icons.AutoMirrored.Outlined.InsertDriveFile) { },
-                    TopBarAction(
-                        "Search",
-                        Icons.Outlined.Search,
-                        enabled = !isReadOnly,
-                    ) { onShowSearchPanelChange(!showSearchPanel) },
-                    TopBarAction("Preview", Icons.Outlined.Language) {
-                        onShowOverflowMenuChange(false)
-                        onPreview()
+                val actions = listOf<BarAction>(
+                    {
+                        ActionItem(
+                            "File", Icons.AutoMirrored.Outlined.InsertDriveFile, trailing = {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.rotate(90f),
+                                    tint = contentColor.copy(alpha = 0.5f),
+                                )
+                            }) {
+                            fileMenuExpanded = true
+                        }
                     },
-                    TopBarAction("Syntax", Icons.Outlined.Code) {
-                        onShowOverflowMenuChange(false)
-                        onShowLanguagePicker()
+                    {
+                        ActionItem("Search", Icons.Outlined.Search, enabled = !isReadOnly) {
+                            onShowSearchPanelChange(!showSearchPanel)
+                        }
                     },
-                    TopBarAction("Previous position", Icons.AutoMirrored.Outlined.ArrowBack) { },
-                    TopBarAction("Next position", Icons.AutoMirrored.Outlined.ArrowForward) { },
-                    TopBarAction("Jump to line", Icons.AutoMirrored.Outlined.ShortText) { },
-                    TopBarAction(
-                        "Word wrap",
-                        Icons.AutoMirrored.Outlined.ShortText,
-                        checked = viewModel?.wordWrap,
-                    ) { viewModel?.toggleWordWrap() },
-                    TopBarAction(
-                        "Read-only mode",
-                        Icons.Filled.RemoveRedEye,
-                        checked = viewModel?.readOnly,
-                    ) { viewModel?.toggleReadOnly() },
-                    TopBarAction(
-                        "Code completion",
-                        Icons.Outlined.Copyright,
-                        checked = viewModel?.autoCompletion,
-                    ) { viewModel?.toggleAutoCompletion() },
-                    TopBarAction("Settings", Icons.Filled.Settings) {
-                        onShowSettingsChange(true)
-                        onShowOverflowMenuChange(false)
+                    {
+                        ActionItem(
+                            "Preview", Icons.Outlined.Language, closesMenu = true
+                        ) { onPreview() }
                     },
-                    TopBarAction("Close file", Icons.Outlined.Close) { onCloseFile() },
+                    {
+                        ActionItem(
+                            "Syntax", Icons.Outlined.Code, closesMenu = true
+                        ) { onShowLanguagePicker() }
+                    },
+                    { ActionItem("Previous position", Icons.AutoMirrored.Outlined.ArrowBack) },
+                    { ActionItem("Next position", Icons.AutoMirrored.Outlined.ArrowForward) },
+                    { ActionItem("Jump to line", Icons.AutoMirrored.Outlined.ShortText) },
+                    {
+                        ToggleItem(
+                            "Word wrap",
+                            Icons.AutoMirrored.Outlined.ShortText,
+                            viewModel?.wordWrap == true
+                        ) {
+                            viewModel?.toggleWordWrap()
+                        }
+                    },
+                    {
+                        ToggleItem("Read-only mode", Icons.Filled.RemoveRedEye, isReadOnly) {
+                            viewModel?.toggleReadOnly()
+                        }
+                    },
+                    {
+                        ActionItem(
+                            "Settings", Icons.Filled.Settings, closesMenu = true
+                        ) { onShowSettingsChange(true) }
+                    },
+                    { ActionItem("Close file", Icons.Outlined.Close) { onCloseFile() } },
                 )
+                val barHost = remember { ActionHost(inOverflow = false, dismissMenu = {}) }
+                val menuHost = ActionHost(inOverflow = true) { onShowOverflowMenuChange(false) }
                 val maxVisibleActions = with(LocalDensity.current) {
                     when (LocalWindowInfo.current.containerSize.width.toDp()) {
                         in 0.dp..460.dp -> 0
@@ -219,37 +421,99 @@ fun TopBarActions(
                         else -> 4
                     }
                 }
-                val visibleActions = flexibleActions.take(maxVisibleActions)
-                val overflowActions = flexibleActions.drop(maxVisibleActions)
-                visibleActions.forEach { action ->
-                    IconButton(onClick = action.onClick, enabled = action.enabled) {
-                        Icon(action.icon, contentDescription = action.label)
-                    }
-                }
-                if (overflowActions.isNotEmpty()) {
+                val visible = actions.take(maxVisibleActions)
+                val overflow = actions.drop(maxVisibleActions)
+                visible.forEach { action -> barHost.action() }
+                if (overflow.isNotEmpty()) {
                     IconButton(onClick = { onShowOverflowMenuChange(true) }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "More")
                         DropdownMenu(
+                            containerColor = MaterialTheme.colorScheme.onSecondary,
                             expanded = showOverflowMenu,
                             onDismissRequest = { onShowOverflowMenuChange(false) },
                             properties = PopupProperties(
-                                focusable = false,
-                                dismissOnBackPress = false,
+                                focusable = false, dismissOnBackPress = false
                             ),
                         ) {
-                            overflowActions.forEach { action ->
-                                DropdownMenuItem(
-                                    text = { Text(action.label) },
-                                    leadingIcon = { Icon(action.icon, contentDescription = null) },
-                                    trailingIcon = action.checked?.let {
-                                        { Checkbox(checked = it, onCheckedChange = null) }
-                                    },
-                                    enabled = action.enabled,
-                                    onClick = { action.onClick() },
-                                )
-                            }
+                            overflow.forEach { action -> menuHost.action() }
                         }
                     }
+                }
+                DropdownMenu(
+                    expanded = fileMenuExpanded,
+                    containerColor = MaterialTheme.colorScheme.onSecondary,
+                    onDismissRequest = { fileMenuExpanded = false }) {
+                    Text(
+                        modifier = Modifier.padding(
+                            start = 12.dp, top = 8.dp, bottom = 8.dp
+                        ),
+                        color = contentColor.copy(alpha = 0.8f),
+                        text = "File",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Save,
+                                contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
+                        text = { Text("Save as", color = contentColor.copy(alpha = 0.8f)) },
+                        onClick = { })
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
+                        text = { Text("Reload", color = contentColor.copy(alpha = 0.8f)) },
+                        onClick = { })
+                    DropdownMenuItem(leadingIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                            modifier = Modifier.rotate(45f),
+                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+                        )
+                    }, text = {
+                        Text(
+                            "Reload with charset",
+                            color = contentColor.copy(alpha = 0.8f),
+                        )
+                    }, onClick = { })
+                    DropdownMenuItem(leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.FormatSize,
+                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+                        )
+                    }, text = {
+                        Text(
+                            "Set the saved encoding",
+                            color = contentColor.copy(alpha = 0.8f),
+                        )
+                    }, onClick = { })
+                    DropdownMenuItem(leadingIcon = {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
+                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+                        )
+                    }, text = {
+                        Text(
+                            "Linebreak",
+                            color = contentColor.copy(alpha = 0.8f),
+                        )
+                    }, onClick = { })
+                    DropdownMenuItem(leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null, tint = contentColor.copy(alpha = 0.5f),
+                        )
+                    }, text = {
+                        Text(
+                            "File info",
+                            color = contentColor.copy(alpha = 0.8f),
+                        )
+                    }, onClick = { })
                 }
             }
             Column(

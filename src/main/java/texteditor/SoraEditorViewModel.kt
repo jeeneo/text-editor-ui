@@ -45,14 +45,6 @@ private val Context.editorPrefs: SharedPreferences
 
 enum class SaveButtonState { IDLE, SAVED, ERROR }
 
-data class TopBarAction(
-    val label: String,
-    val icon: ImageVector,
-    val checked: Boolean? = null,
-    val enabled: Boolean = true,
-    val onClick: () -> Unit,
-)
-
 private const val GRAMMAR_EDIT_DEBOUNCE_MS = 400L
 
 private const val NEW_FILE_NAME = "untitled.txt"
