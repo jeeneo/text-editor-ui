@@ -1,4 +1,3 @@
-/* Styling for the rendered document only: the Android host draws the title bar. */
 :root {
   --bg: #1e1e1e;
   --bg-panel: #252526;
@@ -6,7 +5,7 @@
   --text: #d4d4d4;
   --muted: #808080;
   --sans: "Segoe UI", Tahoma, Arial, sans-serif;
-  --mono: Consolas, "Courier New", monospace;
+  --mono: monospace;
 }
 * { box-sizing: border-box; }
 html, body { min-height: 100%; margin: 0; }

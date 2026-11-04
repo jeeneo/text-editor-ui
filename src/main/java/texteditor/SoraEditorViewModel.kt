@@ -417,6 +417,7 @@ class SoraEditorViewModel(
             markdown = markdown,
             title = displayNameOf(session),
             baseUrl = session.path?.let(::parentOf)?.let { "file://$it/" },
+            monoFontId = selectedFont,
         )
     }
 

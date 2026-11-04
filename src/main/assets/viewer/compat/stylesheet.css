@@ -1,7 +1,3 @@
-/* Styling for the rendered document only: the Android host draws the title bar.
-   Fallback styling for old WebViews (Android 5 ships Chromium 37).
-   No custom properties (var(), Chromium 49), no flexbox gap (84), no :is() (88),
-   no position: sticky (56) and no 4-digit hex colours (62) — literal values only. */
 * { box-sizing: border-box; }
 html, body { min-height: 100%; margin: 0; }
 body {
@@ -15,7 +11,7 @@ main { max-width: 860px; margin: 0 auto; padding: 0 20px; }
 #preview { padding: 16px 0 64px; }
 #preview > :first-child { margin-top: 0; }
 #preview h1, #preview h2 { border-bottom: 1px solid #333333; padding-bottom: 4px; }
-#preview code { font-family: Consolas, "Courier New", monospace; font-size: 13px; background: #252526; padding: 1px 4px; }
+#preview code { font-family: monospace; font-size: 13px; background: #252526; padding: 1px 4px; }
 #preview pre { background: #252526; border: 1px solid #333333; padding: 8px 10px; overflow-x: auto; }
 #preview pre code { background: none; padding: 0; }
 #preview blockquote { margin: 0; padding-left: 10px; border-left: 3px solid #333333; color: #808080; }

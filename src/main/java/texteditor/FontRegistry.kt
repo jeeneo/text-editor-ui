@@ -14,6 +14,12 @@ object FontRegistry {
         val displayName: String,
     )
 
+    data class FontData(
+        val bytes: ByteArray,
+        val mimeType: String,
+        val format: String,
+    )
+
     private const val IMPORTED_FONTS_DIR = "imported_fonts"
     private const val BUNDLED_FONTS_ASSET_DIR = "fonts"
     private const val DEFAULT_FALLBACK_ID = "__default_monospace__"
@@ -94,17 +100,46 @@ object FontRegistry {
         fontId: String,
     ): Boolean = File(fontId).parentFile == importedFontsDir(context)
 
+    fun isSystemFont(fontId: String): Boolean = scanSystemFonts().any { it.id == fontId }
+
+    private fun resolveFontId(
+        context: Context,
+        fontId: String,
+    ): String? =
+        if (availableFonts(context, includeSystemFonts = true).any { it.id == fontId }) {
+            fontId
+        } else {
+            bundledFonts(context).firstOrNull()?.id
+        }
+
+    fun readFontData(
+        context: Context,
+        fontId: String,
+    ): FontData? {
+        val resolvedId = resolveFontId(context, fontId) ?: return null
+        val bytes =
+            try {
+                if (resolvedId in bundledFontIds(context)) {
+                    context.assets.open(resolvedId).use { it.readBytes() }
+                } else {
+                    File(resolvedId).readBytes()
+                }
+            } catch (_: Exception) {
+                return null
+            }
+        return when (resolvedId.substringAfterLast('.', "").lowercase()) {
+            "otf" -> FontData(bytes, "font/otf", "opentype")
+            "ttc" -> FontData(bytes, "font/collection", "truetype")
+            else -> FontData(bytes, "font/ttf", "truetype")
+        }
+    }
+
     fun loadTypeface(
         context: Context,
         fontId: String,
     ): Typeface {
         typefaceCache[fontId]?.let { return it }
-        val resolvedId =
-            if (availableFonts(context, includeSystemFonts = false).any { it.id == fontId }) {
-                fontId
-            } else {
-                bundledFonts(context).firstOrNull()?.id ?: DEFAULT_FALLBACK_ID
-            }
+        val resolvedId = resolveFontId(context, fontId) ?: DEFAULT_FALLBACK_ID
 
         if (resolvedId == DEFAULT_FALLBACK_ID) {
             typefaceCache[resolvedId] = Typeface.MONOSPACE
