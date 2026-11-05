@@ -2,7 +2,6 @@
 
 package texteditor
 
-import org.json.JSONArray
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
@@ -14,6 +13,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.edit
@@ -34,6 +34,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import texteditor.dialogs.data.DialogController
 import texteditor.dialogs.data.DialogRequest
 import texteditor.encoding.AndroidLegacyDetector
@@ -169,7 +170,7 @@ class SoraEditorViewModel(
         get() = DocumentSessions.active
     var openDocuments: List<OpenDocument> by mutableStateOf(emptyList())
         private set
-    var activeDocumentId: Long by mutableStateOf(0L)
+    var activeDocumentId: Long by mutableLongStateOf(0L)
         private set
     val dialogs = DialogController()
     var preview: PreviewState? by mutableStateOf(null)
@@ -283,14 +284,13 @@ class SoraEditorViewModel(
             openStartedAt = SystemClock.elapsedRealtime()
             Log.d(
                 TAG,
-                "open ${fileNameOf(path)}: grammar index warm=${EditorLanguages.isInitialized}" +
-                        " theme warm=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
+                "open ${fileNameOf(path)}: grammar index warm=${EditorLanguages.isInitialized}" + " theme warm=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
             )
             loadInto(session, path)
         }
     }
 
-    fun openNew(directory: String) {
+    fun openNew(directory: String?) {
         val session = DocumentSessions.create(
             path = null,
             name = null,
@@ -305,12 +305,7 @@ class SoraEditorViewModel(
     }
 
     fun openNewFile() {
-        val directory = activeSession?.let { it.path?.let(::parentOf) ?: it.directory }
-        if (directory == null) {
-            AppToasts.show(getApplication(), "No folder for a new file")
-            return
-        }
-        openNew(directory)
+        openNew(activeSession?.let { it.path?.let(::parentOf) ?: it.directory })
     }
 
     fun activate(id: Long) {
@@ -329,6 +324,7 @@ class SoraEditorViewModel(
 
     fun close(id: Long): Boolean {
         val wasActive = activeDocumentId == id
+        DocumentSessions.get(id)?.loadJob?.cancel()
         if (!DocumentSessions.remove(id)) return false
         if (wasActive) {
             val next = DocumentSessions.active
@@ -336,6 +332,15 @@ class SoraEditorViewModel(
                 activeDocumentId = next.id
                 languagesLoaded = false
                 project(next)
+            } else {
+                activeDocumentId = 0L
+                loadState = LoadState.Success
+                languagesLoaded = true
+                isModified = false
+                isNewFile = false
+                savedPath = null
+                openedName = null
+                languageOverride = null
             }
         }
         publishDocuments()
@@ -366,8 +371,7 @@ class SoraEditorViewModel(
     fun openJumpToLineDialog(currentLine: Int, lineCount: Int) {
         dialogs.show(
             DialogRequest.JumpToLine(
-                currentLine,
-                lineCount
+                currentLine, lineCount
             )
         )
     }
@@ -482,12 +486,10 @@ class SoraEditorViewModel(
             try {
                 val app = getApplication<Application>()
                 val started = SystemClock.elapsedRealtime()
-                grammarsReady =
-                    withContext(Dispatchers.IO) { EditorLanguages.initialize(app) }
+                grammarsReady = withContext(Dispatchers.IO) { EditorLanguages.initialize(app) }
                 Log.d(
                     TAG,
-                    "grammar index loaded in ${SystemClock.elapsedRealtime() - started}ms" +
-                            " (ready=$grammarsReady)",
+                    "grammar index loaded in ${SystemClock.elapsedRealtime() - started}ms" + " (ready=$grammarsReady)",
                 )
             } finally {
                 grammarsSettled = true
@@ -551,8 +553,7 @@ class SoraEditorViewModel(
         lineNumbers = prefs.getBoolean(PrefKeys.LINE_NUMBERS, EditorDefaults.LINE_NUMBERS)
         invisibleChars = prefs.getBoolean(PrefKeys.INVISIBLE_CHARS, EditorDefaults.INVISIBLE_CHARS)
         readOnly = prefs.getBoolean(PrefKeys.READ_ONLY, EditorDefaults.READ_ONLY)
-        autoCompletion =
-            prefs.getBoolean(PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION)
+        autoCompletion = prefs.getBoolean(PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION)
         defaultEncodingId =
             prefs.getString(PrefKeys.DEFAULT_ENCODING, EditorDefaults.DEFAULT_ENCODING)
                 ?: EditorDefaults.DEFAULT_ENCODING
@@ -773,8 +774,7 @@ class SoraEditorViewModel(
                 if (added) EditorLanguages.rebuildGrammar(scope)
                 Log.d(
                     TAG,
-                    "load ${fileNameOf(path)}: scope=$scope preloaded=$preloaded" +
-                            " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
+                    "load ${fileNameOf(path)}: scope=$scope preloaded=$preloaded" + " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
                 )
             }
             session.content = loaded.content
@@ -979,7 +979,7 @@ class SoraEditorViewModel(
         id: Long = activeDocumentId,
     ) {
         val session = DocumentSessions.get(id)
-        if (session == null || (session.path == null && session.directory == null)) {
+        if (session == null) {
             onError("No document open")
             return
         }
@@ -997,9 +997,8 @@ class SoraEditorViewModel(
                 val bytes = withContext(Dispatchers.Default) {
                     TextEncoder.encode(text, session.encoding)
                 }
-                val target = session.path
-                    ?: host.saveAs(NEW_FILE_NAME, session.directory)
-                    ?: return@launch
+                val target =
+                    session.path ?: host.saveAs(NEW_FILE_NAME, session.directory) ?: return@launch
                 withContext(Dispatchers.IO) {
                     host.save(target, bytes)
                 }
@@ -1054,9 +1053,7 @@ class SoraEditorViewModel(
                 val bytes = withContext(Dispatchers.Default) {
                     TextEncoder.encode(text, session.encoding)
                 }
-                val suggestedName = session.name
-                    ?: session.path?.let(::fileNameOf)
-                    ?: NEW_FILE_NAME
+                val suggestedName = session.name ?: session.path?.let(::fileNameOf) ?: NEW_FILE_NAME
                 val initialDirectory = session.path?.let(::parentOf) ?: session.directory
                 val target = host.saveAs(suggestedName, initialDirectory) ?: return@launch
                 withContext(Dispatchers.IO) {

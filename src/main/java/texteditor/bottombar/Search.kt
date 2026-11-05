@@ -131,14 +131,13 @@ fun CustomSearchBar(
     LaunchedEffect(Unit) {
         if (hasOpened) return@LaunchedEffect
         hasOpened = true
-        val currentEditor = editor
-        if (currentEditor != null && initialQuery.isNullOrBlank()) {
-            val cursor = currentEditor.cursor
+        if (editor != null && initialQuery.isNullOrBlank()) {
+            val cursor = editor.cursor
             if (cursor.isSelected) {
-                val selected = currentEditor.text
+                val selected = editor.text
                     .subSequence(cursor.left, cursor.right).toString()
                 if (selected.isNotBlank() && !selected.contains('\n')) {
-                    currentEditor.searcher.isEnsureOccurrenceVisible = true
+                    editor.searcher.isEnsureOccurrenceVisible = true
                     queryValue = TextFieldValue(selected, TextRange(0, selected.length))
                     performSearch(selected)
                 }

@@ -132,10 +132,10 @@ fun TextEditorScreen(
     }
     val saveButtonState = remember { mutableStateOf(SaveButtonState.IDLE) }
     val scope = rememberCoroutineScope()
-    
+
     var leaving by remember { mutableStateOf(false) }
     val noDocuments = viewModel.openDocuments.isEmpty() && !viewModel.isLoading && !leaving
-    
+
     var leaveAfterClose by remember { mutableStateOf(false) }
 
     LaunchedEffect(saveButtonState.value) {
