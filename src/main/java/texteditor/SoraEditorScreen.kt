@@ -174,6 +174,26 @@ fun TextEditorScreen(
         viewModel.activate(id)
     }
 
+    fun saveAllDocuments() {
+        val pending = viewModel.openDocuments.filter { it.isModified }.map { it.id }
+        fun saveNext(index: Int) {
+            if (index >= pending.size) return
+            viewModel.save(
+                getText = ::currentText,
+                onSuccess = {
+                    saveButtonState.value = SaveButtonState.SAVED
+                    saveNext(index + 1)
+                },
+                onError = { message ->
+                    reportSaveError(message)
+                    saveNext(index + 1)
+                },
+                id = pending[index],
+            )
+        }
+        saveNext(0)
+    }
+
     fun minimize() {
         editorRef?.let { viewModel.saveCursorState(it) }
         scope.launch { drawerState.close() }
@@ -341,6 +361,14 @@ fun TextEditorScreen(
                     onOpenPath = { path ->
                         scope.launch { drawerState.close() }
                         viewModel.open(path, fileNameOf(path))
+                    },
+                    onNewFile = {
+                        scope.launch { drawerState.close() }
+                        viewModel.openNewFile()
+                    },
+                    onSaveAll = {
+                        scope.launch { drawerState.close() }
+                        saveAllDocuments()
                     },
                     onUnpin = viewModel::unpin,
                     onClose = { id ->

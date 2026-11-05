@@ -58,6 +58,8 @@ fun EditorDrawerSheet(
     activeDocumentId: Long,
     onSelect: (Long) -> Unit,
     onOpenPath: (String) -> Unit,
+    onNewFile: () -> Unit,
+    onSaveAll: () -> Unit,
     onUnpin: (String) -> Unit,
     onClose: (Long) -> Unit,
     onMinimize: () -> Unit,
@@ -132,7 +134,10 @@ fun EditorDrawerSheet(
                             )
                         },
                         text = { Text("Save all") },
-                        onClick = { fileMenuExpanded = false },
+                        onClick = {
+                            fileMenuExpanded = false
+                            onSaveAll()
+                        },
                     )
                     DropdownMenuItem(
                         leadingIcon = {
@@ -143,7 +148,10 @@ fun EditorDrawerSheet(
                             )
                         },
                         text = { Text("New file") },
-                        onClick = { fileMenuExpanded = false },
+                        onClick = {
+                            fileMenuExpanded = false
+                            onNewFile()
+                        },
                     )
                 }
             }
