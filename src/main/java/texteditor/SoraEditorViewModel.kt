@@ -3,8 +3,6 @@
 package texteditor
 
 import android.app.Application
-import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.SystemClock
@@ -16,7 +14,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.content.edit
 import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -34,31 +31,36 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import texteditor.dialogs.data.DialogController
-import texteditor.dialogs.data.DialogRequest
-import texteditor.encoding.AndroidLegacyDetector
-import texteditor.encoding.EncodingCatalog
-import texteditor.encoding.EncodingDetection
-import texteditor.encoding.EncodingDetector
-import texteditor.encoding.EncodingPickerMode
-import texteditor.encoding.EncodingScheme
-import texteditor.encoding.LineEnding
-import texteditor.encoding.LineEndingInfo
-import texteditor.encoding.LineEndings
-import texteditor.encoding.RecordingReader
-import texteditor.encoding.TextEncoder
-import texteditor.encoding.UnencodableCharacterException
-import texteditor.encoding.bomLengthIn
-import texteditor.encoding.readerFor
-import texteditor.screens.preview.PreviewState
+import texteditor.data.AppToasts
+import texteditor.data.DocumentSession
+import texteditor.data.DocumentSessions
+import texteditor.data.EditorDefaults
+import texteditor.data.EditorLanguages
+import texteditor.data.EditorPreferences
+import texteditor.data.EditorPrefsSnapshot
+import texteditor.data.encoding.AndroidLegacyDetector
+import texteditor.data.encoding.EncodingCatalog
+import texteditor.data.encoding.EncodingDetection
+import texteditor.data.encoding.EncodingDetector
+import texteditor.data.encoding.EncodingPickerMode
+import texteditor.data.encoding.EncodingScheme
+import texteditor.data.encoding.LineEnding
+import texteditor.data.encoding.LineEndingInfo
+import texteditor.data.encoding.LineEndings
+import texteditor.data.encoding.RecordingReader
+import texteditor.data.encoding.TextEncoder
+import texteditor.data.encoding.UnencodableCharacterException
+import texteditor.data.encoding.bomLengthIn
+import texteditor.data.encoding.readerFor
+import texteditor.data.registry.FontRegistry
+import texteditor.data.registry.ThemeRegistry
+import texteditor.ui.dialogs.data.DialogController
+import texteditor.ui.dialogs.data.DialogRequest
+import texteditor.ui.screens.preview.PreviewState
 import java.io.BufferedInputStream
 import java.io.IOException
 import kotlin.time.Duration.Companion.milliseconds
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry as EditorThemeRegistry
-
-private val Context.editorPrefs: SharedPreferences
-    get() = getSharedPreferences("text_editor_prefs", Context.MODE_PRIVATE)
 
 enum class SaveButtonState { IDLE, SAVED, ERROR }
 
@@ -94,43 +96,6 @@ val SYMBOLS = listOf(
     ":" to ":",
 )
 
-private object PrefKeys {
-    const val WORD_WRAP = "word_wrap"
-    const val SYNTAX_HIGHLIGHT = "syntax_highlight"
-    const val MINIMAP_SHOWN = "minimap_shown"
-    const val MINIMAP_BLOCKS = "minimap_blocks"
-    const val SYMBOL_BAR = "symbol_bar"
-    const val LINE_NUMBERS = "line_numbers"
-    const val SELECTED_THEME = "selected_theme"
-    const val TEXT_SIZE_PX = "text_size_px"
-    const val SELECTED_FONT = "selected_font"
-    const val INVISIBLE_CHARS = "invisible_chars"
-    const val READ_ONLY = "read_only"
-    const val AUTO_COMPLETION = "auto_completion"
-    const val DEFAULT_ENCODING = "default_encoding"
-    const val DEFAULT_LINE_ENDING = "default_line_ending"
-    const val DETECT_ENCODING = "detect_encoding"
-    const val PINNED_FILES = "pinned_files"
-}
-
-private object EditorDefaults {
-    const val WORD_WRAP = true
-    const val SYNTAX_HIGHLIGHT = true
-    const val TEXT_SIZE_PX = 0f
-    const val MINIMAP_SHOWN = false
-    const val MINIMAP_BLOCKS = false
-    const val SYMBOL_BAR = true
-    const val LINE_NUMBERS = true
-    const val INVISIBLE_CHARS = true
-    const val READ_ONLY = false
-    const val AUTO_COMPLETION = true
-    const val DEFAULT_ENCODING = "utf8"
-    const val DEFAULT_LINE_ENDING = "LF"
-    const val DETECT_ENCODING = true
-    const val SELECTED_THEME = "default"
-    const val SELECTED_FONT = "fonts/CascadiaCode-Regular.ttf"
-}
-
 sealed interface LoadState {
     data object Loading : LoadState
     data object Success : LoadState
@@ -160,7 +125,7 @@ class SoraEditorViewModel(
 ) : AndroidViewModel(application) {
     private var grammarLoadJob: Job? = null
     private var editGrammarJob: Job? = null
-    private val prefs get() = getApplication<Application>().editorPrefs
+    private val editorPreferences get() = EditorPreferences(getApplication())
     private var openStartedAt = 0L
     private var saveCopyInProgress = false
     private var unencodableSessionId = 0L
@@ -542,79 +507,48 @@ class SoraEditorViewModel(
     }
 
     private fun loadPrefs() {
-        val prefs = this.prefs
-        wordWrap = prefs.getBoolean(PrefKeys.WORD_WRAP, EditorDefaults.WORD_WRAP)
-        syntaxHighlight =
-            prefs.getBoolean(PrefKeys.SYNTAX_HIGHLIGHT, EditorDefaults.SYNTAX_HIGHLIGHT)
-        textSizePx = prefs.getFloat(PrefKeys.TEXT_SIZE_PX, EditorDefaults.TEXT_SIZE_PX)
-        miniMap = prefs.getBoolean(PrefKeys.MINIMAP_SHOWN, EditorDefaults.MINIMAP_SHOWN)
-        miniMapBlocks = prefs.getBoolean(PrefKeys.MINIMAP_BLOCKS, EditorDefaults.MINIMAP_BLOCKS)
-        symbolBar = prefs.getBoolean(PrefKeys.SYMBOL_BAR, EditorDefaults.SYMBOL_BAR)
-        lineNumbers = prefs.getBoolean(PrefKeys.LINE_NUMBERS, EditorDefaults.LINE_NUMBERS)
-        invisibleChars = prefs.getBoolean(PrefKeys.INVISIBLE_CHARS, EditorDefaults.INVISIBLE_CHARS)
-        readOnly = prefs.getBoolean(PrefKeys.READ_ONLY, EditorDefaults.READ_ONLY)
-        autoCompletion = prefs.getBoolean(PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION)
-        defaultEncodingId =
-            prefs.getString(PrefKeys.DEFAULT_ENCODING, EditorDefaults.DEFAULT_ENCODING)
-                ?: EditorDefaults.DEFAULT_ENCODING
-        if (EncodingCatalog.byId(defaultEncodingId) == null) {
-            defaultEncodingId = EditorDefaults.DEFAULT_ENCODING
-        }
-        defaultLineEnding = runCatching {
-            LineEnding.valueOf(
-                prefs.getString(PrefKeys.DEFAULT_LINE_ENDING, EditorDefaults.DEFAULT_LINE_ENDING)
-                    ?: EditorDefaults.DEFAULT_LINE_ENDING
-            )
-        }.getOrDefault(LineEnding.LF)
-        detectEncoding = prefs.getBoolean(PrefKeys.DETECT_ENCODING, EditorDefaults.DETECT_ENCODING)
-        pinnedPaths = parsePinnedPaths(prefs.getString(PrefKeys.PINNED_FILES, null))
-
-        val app = getApplication<Application>()
-
-        selectedTheme = resolveSelectedId(
-            stored = prefs.getString(PrefKeys.SELECTED_THEME, null) ?: "",
-            availableIds = ThemeRegistry.availableThemes.map { it.id },
-            defaultName = EditorDefaults.SELECTED_THEME,
-        )
-
-        selectedFont = resolveSelectedId(
-            stored = prefs.getString(PrefKeys.SELECTED_FONT, null) ?: "",
-            availableIds = FontRegistry.availableFonts(app, includeSystemFonts = true)
-                .map { it.id },
-            defaultName = EditorDefaults.SELECTED_FONT,
-        )
-
+        val snapshot = editorPreferences.load()
+        wordWrap = snapshot.wordWrap
+        syntaxHighlight = snapshot.syntaxHighlight
+        textSizePx = snapshot.textSizePx
+        miniMap = snapshot.miniMap
+        miniMapBlocks = snapshot.miniMapBlocks
+        symbolBar = snapshot.symbolBar
+        lineNumbers = snapshot.lineNumbers
+        invisibleChars = snapshot.invisibleChars
+        readOnly = snapshot.readOnly
+        autoCompletion = snapshot.autoCompletion
+        defaultEncodingId = snapshot.defaultEncodingId
+        defaultLineEnding = snapshot.defaultLineEnding
+        detectEncoding = snapshot.detectEncoding
+        pinnedPaths = snapshot.pinnedPaths
+        selectedTheme = snapshot.selectedTheme
+        selectedFont = snapshot.selectedFont
         prefsLoaded = true
         savePrefs()
     }
 
     private fun savePrefs() {
-        prefs.edit {
-            putFloat(PrefKeys.TEXT_SIZE_PX, textSizePx)
-            putBoolean(PrefKeys.WORD_WRAP, wordWrap)
-            putBoolean(PrefKeys.SYNTAX_HIGHLIGHT, syntaxHighlight)
-            putString(PrefKeys.SELECTED_THEME, selectedTheme)
-            putBoolean(PrefKeys.MINIMAP_SHOWN, miniMap)
-            putBoolean(PrefKeys.MINIMAP_BLOCKS, miniMapBlocks)
-            putBoolean(PrefKeys.SYMBOL_BAR, symbolBar)
-            putBoolean(PrefKeys.LINE_NUMBERS, lineNumbers)
-            putString(PrefKeys.SELECTED_FONT, selectedFont)
-            putBoolean(PrefKeys.INVISIBLE_CHARS, invisibleChars)
-            putBoolean(PrefKeys.READ_ONLY, readOnly)
-            putBoolean(PrefKeys.AUTO_COMPLETION, autoCompletion)
-            putString(PrefKeys.DEFAULT_ENCODING, defaultEncodingId)
-            putString(PrefKeys.DEFAULT_LINE_ENDING, defaultLineEnding.name)
-            putBoolean(PrefKeys.DETECT_ENCODING, detectEncoding)
-            putString(PrefKeys.PINNED_FILES, JSONArray(pinnedPaths).toString())
-        }
-    }
-
-    private fun parsePinnedPaths(raw: String?): List<String> {
-        if (raw.isNullOrEmpty()) return emptyList()
-        return runCatching {
-            val array = JSONArray(raw)
-            List(array.length()) { array.getString(it) }
-        }.getOrDefault(emptyList())
+        editorPreferences.save(
+            EditorPrefsSnapshot(
+                wordWrap = wordWrap,
+                syntaxHighlight = syntaxHighlight,
+                textSizePx = textSizePx,
+                miniMap = miniMap,
+                miniMapBlocks = miniMapBlocks,
+                symbolBar = symbolBar,
+                lineNumbers = lineNumbers,
+                invisibleChars = invisibleChars,
+                readOnly = readOnly,
+                autoCompletion = autoCompletion,
+                defaultEncodingId = defaultEncodingId,
+                defaultLineEnding = defaultLineEnding,
+                detectEncoding = detectEncoding,
+                pinnedPaths = pinnedPaths,
+                selectedTheme = selectedTheme,
+                selectedFont = selectedFont,
+            )
+        )
     }
 
     fun refreshFontOptions() {
@@ -631,16 +565,6 @@ class SoraEditorViewModel(
                     .filter { it !in fontOptions }
             systemFontsLoaded = true
         }
-    }
-
-    private fun resolveSelectedId(
-        stored: String,
-        availableIds: List<String>,
-        defaultName: String = "",
-    ): String = when {
-        stored.isNotBlank() && stored in availableIds -> stored
-        defaultName.isNotBlank() && defaultName in availableIds -> defaultName
-        else -> availableIds.firstOrNull() ?: ""
     }
 
     fun setLanguage(scope: String?) {
