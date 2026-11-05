@@ -1,5 +1,6 @@
 package texteditor.ui.bars.bottombar
 
+import android.annotation.SuppressLint
 import android.graphics.Typeface
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween

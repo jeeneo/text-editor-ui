@@ -60,7 +60,6 @@ fun EditorDrawerSheet(
     onOpenPath: (String) -> Unit,
     onNewFile: () -> Unit,
     onSaveAll: () -> Unit,
-    onUnpin: (String) -> Unit,
     onClose: (Long) -> Unit,
     onMinimize: () -> Unit,
     width: Dp = DrawerDefaults.MaximumDrawerWidth,
@@ -202,7 +201,6 @@ fun EditorDrawerSheet(
                                 onSelect = {
                                     if (open != null) onSelect(open.id) else onOpenPath(path)
                                 },
-                                onUnpin = { onUnpin(path) },
                                 onClose = open?.let { document -> { onClose(document.id) } },
                             )
                         }
@@ -260,7 +258,6 @@ private fun DocumentRow(
     document: OpenDocument,
     selected: Boolean,
     onSelect: () -> Unit,
-    onUnpin: (() -> Unit)? = null,
     onClose: (() -> Unit)?,
 ) {
     val name = document.name ?: document.path?.let(::fileNameOf) ?: "New file"

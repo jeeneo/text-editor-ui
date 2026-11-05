@@ -1,4 +1,4 @@
-@file:Suppress("SpellCheckingInspection", "UsePropertyAccessSyntax")
+@file:Suppress("SpellCheckingInspection")
 
 package texteditor
 
@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.rosemoe.sora.event.ContentChangeEvent
@@ -78,6 +79,7 @@ fun TextEditorScreen(
     initialSearchQuery: String? = null,
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     var editorRef by remember { mutableStateOf<CodeEditor?>(null) }
     var showSearchPanel by rememberSaveable { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
@@ -90,6 +92,7 @@ fun TextEditorScreen(
     var lineCount by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf(initialSearchQuery) }
     var shownDocumentId by remember { mutableLongStateOf(viewModel.activeDocumentId) }
+    var editorReadyId by remember { mutableLongStateOf(-1L) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val displayPath = viewModel.savedPath
     val typefaceToLoad = remember(viewModel.selectedFont) {
@@ -154,7 +157,6 @@ fun TextEditorScreen(
         onNavigateUp()
     }
 
-    /** Saves [id], which may be a document that is only kept in the drawer right now. */
     fun saveDocument(id: Long, onSaved: () -> Unit) {
         viewModel.save(
             getText = ::currentText,
@@ -169,8 +171,6 @@ fun TextEditorScreen(
 
     fun switchToDocument(id: Long) {
         if (id == viewModel.activeDocumentId) return
-        // The editor is about to be handed to another document, so keep where this one stood.
-        editorRef?.let { viewModel.saveCursorState(it) }
         viewModel.activate(id)
     }
 
@@ -195,7 +195,6 @@ fun TextEditorScreen(
     }
 
     fun minimize() {
-        editorRef?.let { viewModel.saveCursorState(it) }
         scope.launch { drawerState.close() }
         onMinimize()
     }
@@ -270,6 +269,23 @@ fun TextEditorScreen(
             editorRef?.searcher?.stopSearch()
         }
     }
+    val shouldFocusEditor =
+        editorReadyId == viewModel.activeDocumentId && drawerState.currentValue == DrawerValue.Closed && !showSearchPanel && !showSettings && viewModel.preview == null && searchQuery == null
+    LaunchedEffect(editorRef, shouldFocusEditor) {
+        if (!shouldFocusEditor) return@LaunchedEffect
+        val editor = editorRef ?: return@LaunchedEffect
+        fun focus() {
+            focusManager.clearFocus(force = true)
+            editor.requestFocus()
+            if (!viewModel.readOnly) editor.showSoftInput()
+        }
+        delay(120.milliseconds)
+        focus()
+        if (!editor.hasFocus()) {
+            delay(120.milliseconds)
+            focus()
+        }
+    }
     LaunchedEffect(viewModel.preview) {
         if (viewModel.preview != null) shownPreview = viewModel.preview
     }
@@ -301,14 +317,22 @@ fun TextEditorScreen(
         refreshPosition()
         val selectionReceipt =
             editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ -> refreshPosition() }
-        val contentReceipt =
-            editor.subscribeEvent(ContentChangeEvent::class.java) { _, _ ->
-                refreshPosition()
-            }
+        val contentReceipt = editor.subscribeEvent(ContentChangeEvent::class.java) { _, _ ->
+            refreshPosition()
+        }
         onDispose {
             selectionReceipt.unsubscribe()
             contentReceipt.unsubscribe()
         }
+    }
+    DisposableEffect(editorRef) {
+        val editor = editorRef
+        viewModel.beforeDocumentSwitch = {
+            if (editor != null) {
+                viewModel.saveCursorState(viewModel.activeDocumentId, editor)
+            }
+        }
+        onDispose { viewModel.beforeDocumentSwitch = null }
     }
     DialogHost(
         viewModel = viewModel,
@@ -331,7 +355,7 @@ fun TextEditorScreen(
     val title = if (noDocuments) "" else buildString {
         if (viewModel.isModified) append("*")
         when {
-            viewModel.isNewFile -> append("New file")
+            viewModel.isNewFile -> append("untitled")
             viewModel.openedName != null -> append(viewModel.openedName)
             else -> append(displayPath?.let(::fileNameOf) ?: "")
         }
@@ -370,7 +394,6 @@ fun TextEditorScreen(
                         scope.launch { drawerState.close() }
                         saveAllDocuments()
                     },
-                    onUnpin = viewModel::unpin,
                     onClose = { id ->
                         leaveAfterClose = false
                         viewModel.requestClose(id)
@@ -448,6 +471,7 @@ fun TextEditorScreen(
                                 text = state.message,
                                 color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier
+                                    .weight(1f)
                                     .align(Alignment.CenterHorizontally)
                                     .padding(16.dp),
                             )
@@ -498,12 +522,14 @@ fun TextEditorScreen(
                                                         canUndo.value = editor.canUndo()
                                                         canRedo.value = editor.canRedo()
                                                         viewModel.onContentChanged(event.action)
-                                                        linesToScan(editor.text, event)
-                                                            ?.let(viewModel::onLinesEdited)
+                                                        linesToScan(editor.text, event)?.let(
+                                                            viewModel::onLinesEdited
+                                                        )
                                                     },
                                                 ).also { editor ->
                                                     viewModel.restoreCursorState(shownId, editor)
                                                     editorRef = editor
+                                                    editorReadyId = shownId
                                                 }
                                             },
                                             modifier = Modifier.fillMaxSize(),

@@ -131,6 +131,7 @@ class SoraEditorViewModel(
     private var unencodableSessionId = 0L
     private var retrySave: (() -> Unit)? = null
 
+    var beforeDocumentSwitch: (() -> Unit)? = null
     private val activeSession: DocumentSession?
         get() = DocumentSessions.active
     var openDocuments: List<OpenDocument> by mutableStateOf(emptyList())
@@ -168,10 +169,7 @@ class SoraEditorViewModel(
         private set
     var languagesLoaded: Boolean by mutableStateOf(false)
         private set
-    val isLoading: Boolean
-        get() = loadState is LoadState.Loading || !languagesLoaded
-
-    /** True while a write is in flight, which can take a while on slow storage. */
+    val isLoading: Boolean get() = loadState is LoadState.Loading
     var isSaving: Boolean by mutableStateOf(false)
         private set
     var grammarEpoch: Int by mutableIntStateOf(0)
@@ -232,7 +230,7 @@ class SoraEditorViewModel(
         }
     }
 
-    fun open(path: String, name: String) {
+    fun open(path: String, name: String, forcedEncoding: EncodingScheme? = null) {
         DocumentSessions.findByPath(path)?.let { alreadyOpen ->
             activate(alreadyOpen.id)
             return
@@ -249,9 +247,9 @@ class SoraEditorViewModel(
             openStartedAt = SystemClock.elapsedRealtime()
             Log.d(
                 TAG,
-                "open ${fileNameOf(path)}: grammar index warm=${EditorLanguages.isInitialized}" + " theme warm=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
+                "open ${fileNameOf(path)}: grammar index=${EditorLanguages.isInitialized} theme=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
             )
-            loadInto(session, path)
+            loadInto(session, path, forcedEncoding = forcedEncoding)
         }
     }
 
@@ -273,10 +271,21 @@ class SoraEditorViewModel(
         openNew(activeSession?.let { it.path?.let(::parentOf) ?: it.directory })
     }
 
+    private fun openSavedCopy(path: String, scheme: EncodingScheme) {
+        val existing = DocumentSessions.findByPath(path)
+        if (existing != null) {
+            activate(existing.id)
+            loadInto(existing, path, isReload = true, forcedEncoding = scheme)
+        } else {
+            open(path, fileNameOf(path), forcedEncoding = scheme)
+        }
+    }
+
     fun activate(id: Long) {
         val session = DocumentSessions.get(id) ?: return
         DocumentSessions.markUsed(id)
         if (activeDocumentId != id) {
+            beforeDocumentSwitch?.invoke()
             activeDocumentId = id
             languagesLoaded = false
             project(session)
@@ -473,10 +482,6 @@ class SoraEditorViewModel(
         languagesLoaded = true
     }
 
-    fun saveCursorState(editor: CodeEditor) {
-        saveCursorState(activeDocumentId, editor)
-    }
-
     fun saveCursorState(id: Long, editor: CodeEditor) {
         val session = DocumentSessions.get(id) ?: return
         val cursor = editor.cursor
@@ -640,21 +645,15 @@ class SoraEditorViewModel(
         savePrefs()
     }
 
-    fun unpin(path: String) {
-        if (path !in pinnedPaths) return
-        pinnedPaths = pinnedPaths - path
-        savePrefs()
-    }
-
     fun setFont(font: String) {
         selectedFont = font
         savePrefs()
     }
 
-    fun load(path: String) {
-        val session = activeSession ?: return
-        loadInto(session, path)
-    }
+//    fun load(path: String) {
+//        val session = activeSession ?: return
+//        loadInto(session, path)
+//    }
 
     private fun loadInto(
         session: DocumentSession,
@@ -685,20 +684,18 @@ class SoraEditorViewModel(
         forcedEncoding: EncodingScheme? = null,
     ) {
         try {
-            // Read through the host so a root-only file is opened by the
-            // privileged process instead of the app's uid.
             val loaded = readDocument(path, forcedEncoding)
             if (syntaxHighlight) {
                 val app = getApplication<Application>()
                 EditorLanguages.initialize(app)
                 val scope = session.languageOverride ?: EditorLanguages.scopeFor(session.name)
-                val preloaded = EditorLanguages.isScopeRegistered(scope)
+                val languagesLoaded = EditorLanguages.isScopeRegistered(scope)
                 val started = SystemClock.elapsedRealtime()
                 val added = EditorLanguages.registerDocument(scope, loaded.content)
                 if (added) EditorLanguages.rebuildGrammar(scope)
                 Log.d(
                     TAG,
-                    "load ${fileNameOf(path)}: scope=$scope preloaded=$preloaded" + " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
+                    "load ${fileNameOf(path)}: scope=$scope languagesLoaded=$languagesLoaded" + " newLanguages=$added in ${SystemClock.elapsedRealtime() - started}ms",
                 )
             }
             session.content = loaded.content
@@ -711,9 +708,6 @@ class SoraEditorViewModel(
                 if (activeDocumentId == session.id) {
                     project(session)
                     if (isReload) {
-                        // The editor has to put the reloaded text in and re-tokenize it. The grammar
-                        // is left to the debounced edit pass, because reloading it now would restart
-                        // the analyzer from two threads at once.
                         reloadEpoch++
                     }
                 }
@@ -955,10 +949,6 @@ class SoraEditorViewModel(
         }
     }
 
-    /**
-     * Writes [getText] to a new file that the user picks. The document and its file are left
-     * untouched, so unsaved changes only ever reach the copy.
-     */
     fun saveCopyAs(
         getText: () -> String,
         onSuccess: () -> Unit,
@@ -974,6 +964,7 @@ class SoraEditorViewModel(
         viewModelScope.launch {
             try {
                 val text = getText()
+                val scheme = session.encoding
                 val bytes = withContext(Dispatchers.Default) {
                     TextEncoder.encode(text, session.encoding)
                 }
@@ -983,6 +974,7 @@ class SoraEditorViewModel(
                 withContext(Dispatchers.IO) {
                     host.save(target, bytes)
                 }
+                openSavedCopy(target, scheme)
                 onSuccess()
             } catch (e: CancellationException) {
                 throw e

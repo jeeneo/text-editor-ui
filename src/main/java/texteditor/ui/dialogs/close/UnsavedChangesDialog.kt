@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
@@ -51,40 +49,33 @@ fun UnsavedChangesDialog(
                 "\"$documentName\" has unsaved changes.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-
             Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                 Icon(
                     imageVector = Icons.Filled.Save,
                     contentDescription = "",
                     tint = LocalContentColor.current.copy(alpha = 0.5f),
-                    modifier = Modifier.size(26.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text("Save", fontWeight = FontWeight.Medium, fontSize = 15.sp)
             }
-
             Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Icon(
                     imageVector = Icons.Filled.Edit,
                     contentDescription = "",
                     tint = LocalContentColor.current.copy(alpha = 0.5f),
-                    modifier = Modifier.size(26.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text("Keep editing", fontWeight = FontWeight.Medium, fontSize = 15.sp)
             }
-
             Button(onClick = onMinimize, modifier = Modifier.fillMaxWidth()) {
                 Icon(
                     imageVector = Icons.Filled.TransitEnterexit,
                     contentDescription = "",
                     tint = LocalContentColor.current.copy(alpha = 0.5f),
-                    modifier = Modifier.size(28.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text("Minimize", fontWeight = FontWeight.Medium, fontSize = 15.sp)
             }
-            Spacer(Modifier.height(6.dp))
             Button(
                 onClick = onDiscard,
                 modifier = Modifier.fillMaxWidth(),
@@ -97,7 +88,6 @@ fun UnsavedChangesDialog(
                     imageVector = Icons.Filled.Delete,
                     contentDescription = "",
                     tint = LocalContentColor.current.copy(alpha = 0.5f),
-                    modifier = Modifier.size(26.dp)
                 )
                 Spacer(Modifier.width(6.dp))
                 Text("Discard", fontWeight = FontWeight.Medium, fontSize = 15.sp)
@@ -113,7 +103,7 @@ fun UnsavedChangesDialog(
     uiMode = Configuration.UI_MODE_NIGHT_YES or Configuration.UI_MODE_TYPE_NORMAL
 )
 @Composable
-private fun CustomSearchBarReplacePreview() {
+private fun ThisPreview() {
     AppTheme {
         MaterialTheme {
             Box(

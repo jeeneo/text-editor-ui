@@ -7,10 +7,6 @@ import android.view.ViewConfiguration
 import io.github.rosemoe.sora.util.IntPair
 import io.github.rosemoe.sora.widget.CodeEditor
 
-/**
- * Keeps a tap inside an existing selection from collapsing it, while still forwarding a drag to the
- * editor so the handles keep working.
- */
 internal class SelectionListener(
     private val editor: CodeEditor,
     private val isImeVisible: () -> Boolean,
