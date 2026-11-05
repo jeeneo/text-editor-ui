@@ -17,8 +17,10 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +28,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
@@ -126,6 +132,11 @@ fun TextEditorScreen(
     }
     val saveButtonState = remember { mutableStateOf(SaveButtonState.IDLE) }
     val scope = rememberCoroutineScope()
+    
+    var leaving by remember { mutableStateOf(false) }
+    val noDocuments = viewModel.openDocuments.isEmpty() && !viewModel.isLoading && !leaving
+    
+    var leaveAfterClose by remember { mutableStateOf(false) }
 
     LaunchedEffect(saveButtonState.value) {
         if (saveButtonState.value == SaveButtonState.SAVED) {
@@ -175,6 +186,12 @@ fun TextEditorScreen(
         )
     }
 
+    fun leaveEditor() {
+        leaving = true
+        viewModel.openDocuments.map { it.id }.forEach { viewModel.close(it) }
+        onNavigateUp()
+    }
+
     /** Saves [id], which may be a document that is only kept in the drawer right now. */
     fun saveDocument(id: Long, onSaved: () -> Unit) {
         viewModel.save(
@@ -198,11 +215,6 @@ fun TextEditorScreen(
         // The editor is about to be handed to another document, so keep where this one stood.
         editorRef?.let { viewModel.saveCursorState(it) }
         viewModel.activate(id)
-    }
-
-    /** Closes [id], and leaves the editor when that was its last document. */
-    fun closeDocument(id: Long) {
-        if (viewModel.requestClose(id)) onNavigateUp()
     }
 
     fun minimize() {
@@ -327,7 +339,13 @@ fun TextEditorScreen(
                 editorRef?.searcher?.stopSearch()
             }
 
-            else -> closeDocument(viewModel.activeDocumentId)
+            viewModel.openDocuments.isEmpty() -> onNavigateUp()
+            viewModel.isModified -> {
+                leaveAfterClose = true
+                viewModel.requestClose(viewModel.activeDocumentId)
+            }
+
+            else -> leaveEditor()
         }
     }
     DisposableEffect(editorRef) {
@@ -363,11 +381,11 @@ fun TextEditorScreen(
         viewModel = viewModel,
         onSaveAndClose = { id ->
             saveDocument(id) {
-                if (viewModel.close(id)) onNavigateUp()
+                if (leaveAfterClose) leaveEditor() else viewModel.close(id)
             }
         },
         onMinimize = ::minimize,
-        onNothingLeft = onNavigateUp,
+        onDocumentClosed = { if (leaveAfterClose) leaveEditor() },
         onJumpToLine = { line ->
             val editor = editorRef
             if (editor != null) {
@@ -377,7 +395,7 @@ fun TextEditorScreen(
         },
     )
 
-    val title = buildString {
+    val title = if (noDocuments) "" else buildString {
         if (viewModel.isModified) append("*")
         when {
             viewModel.isNewFile -> append("New file")
@@ -412,7 +430,10 @@ fun TextEditorScreen(
                         viewModel.open(path, fileNameOf(path))
                     },
                     onUnpin = viewModel::unpin,
-                    onClose = { id -> closeDocument(id) },
+                    onClose = { id ->
+                        leaveAfterClose = false
+                        viewModel.requestClose(id)
+                    },
                     onMinimize = ::minimize,
                     width = 270.dp,
                 )
@@ -456,8 +477,12 @@ fun TextEditorScreen(
                             editorRef?.hideSoftInput()
                             scope.launch { drawerState.open() }
                         },
-                        onCloseFile = { closeDocument(viewModel.activeDocumentId) },
+                        onCloseFile = {
+                            leaveAfterClose = false
+                            viewModel.requestClose(viewModel.activeDocumentId)
+                        },
                         onShowLanguagePicker = { viewModel.openLanguageDialog(detectedScope) },
+                        noDocuments = noDocuments,
                     )
                 },
             ) { paddingValues ->
@@ -473,15 +498,24 @@ fun TextEditorScreen(
                                 .height(2.dp),
                         )
                     }
-                    when (val state = viewModel.loadState) {
-                        is LoadState.Loading -> {
+                    val state = viewModel.loadState
+                    when {
+                        noDocuments -> {
+                            EmptyEditor(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            )
+                        }
+
+                        state is LoadState.Loading -> {
                             Surface(
                                 modifier = Modifier.fillMaxSize(),
                                 color = Color(PRELOAD_BG_DARK),
                                 content = { })
                         }
 
-                        is LoadState.Error -> {
+                        state is LoadState.Error -> {
                             Text(
                                 text = state.message,
                                 color = MaterialTheme.colorScheme.error,
@@ -491,7 +525,7 @@ fun TextEditorScreen(
                             )
                         }
 
-                        is LoadState.Success -> {
+                        state is LoadState.Success -> {
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -775,7 +809,7 @@ fun TextEditorScreen(
                         }
                     }
                     AnimatedVisibility(
-                        visible = (viewModel.symbolBar && layoutReady && !viewModel.readOnly),
+                        visible = (viewModel.symbolBar && layoutReady && !viewModel.readOnly && !noDocuments),
                         enter = expandVertically(
                             animationSpec = tween(durationMillis = 220),
                             expandFrom = Alignment.Bottom,
@@ -802,7 +836,15 @@ fun TextEditorScreen(
                             shrinkTowards = Alignment.Top,
                         ),
                     ) {
-                        CustomSearchBar(editor = editorRef, initialQuery = searchQuery)
+                        CustomSearchBar(
+                            editor = editorRef,
+                            initialQuery = searchQuery,
+                            onClose = {
+                                showSearchPanel = false
+                                searchQuery = null
+                                editorRef?.searcher?.stopSearch()
+                            },
+                        )
                     }
                 }
             }
@@ -843,6 +885,34 @@ fun TextEditorScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun EmptyEditor(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.background(Color(PRELOAD_BG_DARK)),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.InsertDriveFile,
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "No files open",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Open or create a file",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        )
     }
 }
 

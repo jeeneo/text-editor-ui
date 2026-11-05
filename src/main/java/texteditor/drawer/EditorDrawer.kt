@@ -18,11 +18,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults.contentColor
@@ -30,6 +34,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -57,6 +65,8 @@ fun EditorDrawerSheet(
     onMinimize: () -> Unit,
     width: Dp = DrawerDefaults.MaximumDrawerWidth,
 ) {
+    var closeMenuExpanded by remember { mutableStateOf(false) }
+    var fileMenuExpanded by remember { mutableStateOf(false) }
     ModalDrawerSheet(
         modifier = Modifier.requiredWidth(width),
         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -64,11 +74,82 @@ fun EditorDrawerSheet(
             WindowInsetsSides.Top + WindowInsetsSides.Start
         ),
     ) {
-        Text(
-            text = "Text editor",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Text editor",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 14.dp),
+            )
+            Box {
+                IconButton(onClick = { closeMenuExpanded = true }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close options")
+                }
+                DropdownMenu(
+                    expanded = closeMenuExpanded,
+                    onDismissRequest = { closeMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Close others") },
+                        onClick = { closeMenuExpanded = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Close all") },
+                        onClick = { closeMenuExpanded = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Close unmodified") },
+                        onClick = { closeMenuExpanded = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Close above") },
+                        onClick = { closeMenuExpanded = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Close below") },
+                        onClick = { closeMenuExpanded = false },
+                    )
+                }
+            }
+            Box {
+                IconButton(onClick = { fileMenuExpanded = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = "File options")
+                }
+                DropdownMenu(
+                    expanded = fileMenuExpanded,
+                    onDismissRequest = { fileMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Save,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
+                        text = { Text("Save all") },
+                        onClick = { fileMenuExpanded = false },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = contentColor.copy(alpha = 0.5f),
+                            )
+                        },
+                        text = { Text("New file") },
+                        onClick = { fileMenuExpanded = false },
+                    )
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()

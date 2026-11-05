@@ -174,6 +174,7 @@ fun TopBarActions(
     onOpenDrawer: () -> Unit = {},
     onCloseFile: () -> Unit = {},
     onShowLanguagePicker: () -> Unit = {},
+    noDocuments: Boolean = false,
 ) {
     var fileMenuExpanded by remember { mutableStateOf(false) }
     var editMenuExpanded by remember { mutableStateOf(false) }
@@ -752,63 +753,65 @@ fun TopBarActions(
                     }
                 }
             }
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
-                val alpha = if (viewModel?.isModified ?: false) 0.9f else 0.7f
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(22.5.dp)
+            if (!noDocuments) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(
+                    HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
+                    val alpha = if (viewModel?.isModified ?: false) 0.9f else 0.7f
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .combinedClickable(
-                                onClick = onDocumentOptions,
-                                onLongClick = {
-                                    context.copyToClipboard(
-                                        "filename", title
-                                    )
-                                },
-                            )
-                            .padding(start = 14.dp),
-                        horizontalAlignment = Alignment.Start,
-                        verticalArrangement = Arrangement.Center
+                            .fillMaxWidth()
+                            .height(22.5.dp)
                     ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LocalContentColor.current.copy(alpha = alpha),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .combinedClickable(
-                                onClick = onDocumentOptions,
-                                onLongClick = {
-                                    context.copyToClipboard(
-                                        "status text", statusText
-                                    )
-                                },
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .combinedClickable(
+                                    onClick = onDocumentOptions,
+                                    onLongClick = {
+                                        context.copyToClipboard(
+                                            "filename", title
+                                        )
+                                    },
+                                )
+                                .padding(start = 14.dp),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LocalContentColor.current.copy(alpha = alpha),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
-                            .padding(end = 14.dp),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LocalContentColor.current.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        }
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .combinedClickable(
+                                    onClick = onDocumentOptions,
+                                    onLongClick = {
+                                        context.copyToClipboard(
+                                            "status text", statusText
+                                        )
+                                    },
+                                )
+                                .padding(end = 14.dp),
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = statusText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LocalContentColor.current.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
@@ -53,9 +54,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
@@ -71,8 +77,15 @@ fun CustomSearchBar(
     editor: CodeEditor?,
     initialQuery: String? = null,
     initialShowReplace: Boolean = false,
+    onClose: () -> Unit = {},
 ) {
-    var searchQuery by rememberSaveable { mutableStateOf(initialQuery ?: "") }
+    var queryValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        val initial = initialQuery ?: ""
+        mutableStateOf(TextFieldValue(initial, TextRange(0, initial.length)))
+    }
+    val searchQuery = queryValue.text
+    val focusRequester = remember { FocusRequester() }
+    var hasOpened by rememberSaveable { mutableStateOf(false) }
     var replaceText by rememberSaveable { mutableStateOf("") }
     var useRegex by rememberSaveable { mutableStateOf(false) }
     var wholeWord by rememberSaveable { mutableStateOf(false) }
@@ -113,6 +126,28 @@ fun CustomSearchBar(
             regexError = e.message
             matchCount = 0
         }
+    }
+
+    LaunchedEffect(Unit) {
+        if (hasOpened) return@LaunchedEffect
+        hasOpened = true
+        val currentEditor = editor
+        if (currentEditor != null && initialQuery.isNullOrBlank()) {
+            val cursor = currentEditor.cursor
+            if (cursor.isSelected) {
+                val selected = currentEditor.text
+                    .subSequence(cursor.left, cursor.right).toString()
+                if (selected.isNotBlank() && !selected.contains('\n')) {
+                    currentEditor.searcher.isEnsureOccurrenceVisible = true
+                    queryValue = TextFieldValue(selected, TextRange(0, selected.length))
+                    performSearch(selected)
+                }
+            }
+        }
+        if (queryValue.text.isNotEmpty()) {
+            queryValue = queryValue.copy(selection = TextRange(0, queryValue.text.length))
+        }
+        focusRequester.requestFocus()
     }
 
     LaunchedEffect(editor, initialQuery) {
@@ -182,11 +217,14 @@ fun CustomSearchBar(
                     modifier = Modifier.weight(1f)
                 ) {
                     OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = searchQuery,
-                        onValueChange = {
-                            searchQuery = it
-                            performSearch(it)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                        value = queryValue,
+                        onValueChange = { new ->
+                            val textChanged = new.text != queryValue.text
+                            queryValue = new
+                            if (textChanged) performSearch(new.text)
                         },
                         placeholder = { Text("Find") },
                         singleLine = true,
@@ -247,6 +285,14 @@ fun CustomSearchBar(
                                                 isUseRegex = useRegex,
                                                 isWholeWord = wholeWord,
                                             )
+                                        },
+                                    )
+                                    SearchOptionItem(
+                                        icon = Icons.Filled.Close,
+                                        label = "Close search",
+                                        onToggle = {
+                                            showOptionsMenu = false
+                                            onClose()
                                         },
                                     )
                                 }
@@ -344,23 +390,37 @@ private fun countMatches(
 
 @Composable
 private fun SearchOptionItem(
-    @DrawableRes iconRes: Int,
     label: String,
-    checked: Boolean,
+    @DrawableRes iconRes: Int? = null,
+    icon: ImageVector? = null,
+    checked: Boolean? = null,
     onToggle: () -> Unit,
 ) {
+    require(iconRes != null || icon != null) {
+        "SearchOptionItem requires either iconRes or icon"
+    }
+
     DropdownMenuItem(
         text = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(iconRes),
-                    contentDescription = null,
-                )
+                if (iconRes != null) {
+                    Icon(
+                        painter = painterResource(iconRes),
+                        contentDescription = null,
+                    )
+                } else if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                    )
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(label)
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
-                Checkbox(checked = checked, onCheckedChange = null)
+                if (checked != null) {
+                    Checkbox(checked = checked, onCheckedChange = null)
+                }
             }
         },
         onClick = onToggle,

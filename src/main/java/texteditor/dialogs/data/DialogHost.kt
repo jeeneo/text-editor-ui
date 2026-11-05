@@ -23,7 +23,7 @@ fun DialogHost(
     viewModel: SoraEditorViewModel,
     onSaveAndClose: (Long) -> Unit,
     onMinimize: () -> Unit,
-    onNothingLeft: () -> Unit,
+    onDocumentClosed: () -> Unit,
     onJumpToLine: (Int) -> Unit,
 ) {
     val controller = viewModel.dialogs
@@ -68,7 +68,8 @@ fun DialogHost(
             documentName = request.documentName,
             onDiscard = {
                 controller.dismissTop()
-                if (viewModel.close(request.documentId)) onNothingLeft()
+                viewModel.close(request.documentId)
+                onDocumentClosed()
             },
             onSave = {
                 controller.dismissTop()
