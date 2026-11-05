@@ -246,7 +246,7 @@ fun TopBarActions(
                 }
                 IconButton(
                     onClick = { viewModel?.togglePin() },
-                    enabled = viewModel?.savedPath != null,
+                    enabled = !noDocuments && viewModel?.savedPath != null,
                 ) {
                     Icon(
                         painter = painter,
@@ -274,7 +274,7 @@ fun TopBarActions(
                 }
                 IconButton(
                     onClick = onSave,
-                    enabled = viewModel?.isModified == true && saveButtonState.value == SaveButtonState.IDLE,
+                    enabled = !noDocuments && viewModel?.isModified == true && saveButtonState.value == SaveButtonState.IDLE,
                 ) {
                     Crossfade(
                         targetState = saveButtonState.value,
@@ -816,7 +816,8 @@ fun TopBarActions(
                     }
                 }
             }
-            if (viewModel?.isLoading == true || viewModel?.isSaving == true) {
+            val settling = !noDocuments && viewModel?.editorLaidOut == false
+            if (viewModel?.isLoading == true || viewModel?.isSaving == true || settling) {
                 EditorLoadingIndicator(
                     modifier = Modifier
                         .fillMaxWidth()

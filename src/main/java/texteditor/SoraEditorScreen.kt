@@ -77,9 +77,8 @@ import texteditor.ui.screens.preview.PreviewState
 import texteditor.ui.screens.settings.EditorSettingsScreen
 import kotlin.time.Duration.Companion.milliseconds
 
-private const val HIGHLIGHT_MAX_CHARS = 10_000_000
+private const val HIGHLIGHT_MAX_CHARS = 15_000_000
 
-// The bottom inset shared by the bottom bars, so it never moves from one bar to another.
 @Composable
 private fun bottomBarInsets(): WindowInsets =
     WindowInsets.navigationBars.only(WindowInsetsSides.Bottom).exclude(WindowInsets.ime)
@@ -115,7 +114,7 @@ fun TextEditorScreen(
     val scope = rememberCoroutineScope()
 
     var leaving by remember { mutableStateOf(false) }
-    val noDocuments = viewModel.openDocuments.isEmpty() && !viewModel.isLoading && !leaving
+    val noDocuments = viewModel.openDocuments.isEmpty() && !leaving
 
     var leaveAfterClose by remember { mutableStateOf(false) }
 
@@ -212,13 +211,13 @@ fun TextEditorScreen(
         onMinimize()
     }
 
-    var layoutReady by remember { mutableStateOf(false) }
     val detectedScope = remember(viewModel.openedName, viewModel.grammarsReady) {
         EditorLanguages.scopeFor(viewModel.openedName)
     }
     val highlightActive =
         viewModel.syntaxHighlight && viewModel.grammarsReady && viewModel.loadState is LoadState.Success && viewModel.content.length <= HIGHLIGHT_MAX_CHARS
     val activeLanguage = remember(
+        viewModel.activeDocumentId,
         viewModel.languageOverride,
         detectedScope,
         highlightActive,
@@ -271,8 +270,8 @@ fun TextEditorScreen(
     LaunchedEffect(initialSearchQuery) {
         if (initialSearchQuery != null) searchQuery = initialSearchQuery
     }
-    LaunchedEffect(searchQuery, layoutReady) {
-        if (layoutReady && !searchQuery.isNullOrBlank() && !viewModel.readOnly) {
+    LaunchedEffect(searchQuery, viewModel.editorLaidOut) {
+        if (viewModel.editorLaidOut && !searchQuery.isNullOrBlank() && !viewModel.readOnly) {
             showSearchPanel = true
         }
     }
@@ -517,9 +516,6 @@ fun TextEditorScreen(
                                         },
                                         label = "documentSwitch",
                                     ) { shownId ->
-                                        var laidOut by remember(shownId) {
-                                            mutableStateOf(false)
-                                        }
                                         AndroidView(
                                             factory = { ctx ->
                                                 createCodeEditor(
@@ -528,10 +524,7 @@ fun TextEditorScreen(
                                                     typeface = typefaceToLoad,
                                                     language = activeLanguage,
                                                     initialText = viewModel.content,
-                                                    onFirstLayout = {
-                                                        laidOut = true
-                                                        layoutReady = true
-                                                    },
+                                                    onFirstLayout = viewModel::onEditorLaidOut,
                                                     onContentChange = { editor, event ->
                                                         canUndo.value = editor.canUndo()
                                                         canRedo.value = editor.canRedo()
@@ -553,9 +546,6 @@ fun TextEditorScreen(
                                                 editor.release()
                                             },
                                         )
-                                        if (!laidOut) {
-                                            PreloadSurface()
-                                        }
                                     }
                                 } else {
                                     PreloadSurface()
@@ -564,8 +554,8 @@ fun TextEditorScreen(
                         }
                     }
                     val symbolBarVisible =
-                        viewModel.symbolBar && layoutReady && !viewModel.readOnly && !noDocuments
-                    val searchBarVisible = showSearchPanel && layoutReady && !viewModel.readOnly
+                        viewModel.symbolBar && viewModel.editorLaidOut && !viewModel.readOnly && !noDocuments
+                    val searchBarVisible = showSearchPanel && viewModel.editorLaidOut && !viewModel.readOnly
                     val symbolBarState = remember { MutableTransitionState(false) }
                     symbolBarState.targetState = symbolBarVisible
                     val searchBarState = remember { MutableTransitionState(false) }

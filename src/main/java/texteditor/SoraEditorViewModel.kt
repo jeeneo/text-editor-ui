@@ -126,7 +126,6 @@ class SoraEditorViewModel(
     private var grammarLoadJob: Job? = null
     private var editGrammarJob: Job? = null
     private val editorPreferences get() = EditorPreferences(getApplication())
-    private var openStartedAt = 0L
     private var saveCopyInProgress = false
     private var unencodableSessionId = 0L
     private var retrySave: (() -> Unit)? = null
@@ -167,8 +166,6 @@ class SoraEditorViewModel(
         private set
     var grammarsSettled: Boolean by mutableStateOf(EditorLanguages.isInitialized)
         private set
-    var languagesLoaded: Boolean by mutableStateOf(false)
-        private set
     val isLoading: Boolean get() = loadState is LoadState.Loading
     var isSaving: Boolean by mutableStateOf(false)
         private set
@@ -197,6 +194,8 @@ class SoraEditorViewModel(
     var selectedFont: String by mutableStateOf(EditorDefaults.SELECTED_FONT)
         private set
     var prefsLoaded: Boolean by mutableStateOf(false)
+        private set
+    var editorLaidOut: Boolean by mutableStateOf(false)
         private set
     var textSizePx: Float by mutableFloatStateOf(EditorDefaults.TEXT_SIZE_PX)
         private set
@@ -246,7 +245,6 @@ class SoraEditorViewModel(
         activate(session.id)
         viewModelScope.launch {
             prepareEditor()
-            openStartedAt = SystemClock.elapsedRealtime()
             Log.d(
                 TAG,
                 "open ${fileNameOf(path)}: grammar index=${EditorLanguages.isInitialized} theme=${ThemeRegistry.isInitialized} prefsLoaded=$prefsLoaded",
@@ -289,7 +287,6 @@ class SoraEditorViewModel(
         if (activeDocumentId != id) {
             beforeDocumentSwitch?.invoke()
             activeDocumentId = id
-            languagesLoaded = false
             project(session)
             publishDocuments()
         }
@@ -306,17 +303,9 @@ class SoraEditorViewModel(
             val next = DocumentSessions.active
             if (next != null) {
                 activeDocumentId = next.id
-                languagesLoaded = false
                 project(next)
             } else {
-                activeDocumentId = 0L
                 loadState = LoadState.Success
-                languagesLoaded = true
-                isModified = false
-                isNewFile = false
-                savedPath = null
-                openedName = null
-                languageOverride = null
             }
         }
         publishDocuments()
@@ -474,14 +463,8 @@ class SoraEditorViewModel(
         }
     }
 
-    fun onLanguagesLoaded() {
-        if (!languagesLoaded && openStartedAt > 0L) {
-            Log.d(
-                TAG,
-                "highlighting ready ${SystemClock.elapsedRealtime() - openStartedAt}ms after open",
-            )
-        }
-        languagesLoaded = true
+    fun onEditorLaidOut() {
+        editorLaidOut = true
     }
 
     fun saveCursorState(id: Long, editor: CodeEditor) {
@@ -667,7 +650,6 @@ class SoraEditorViewModel(
     ) {
         if (session.loadJob?.isActive == true) return
         if (activeDocumentId == session.id) {
-            if (!isReload) languagesLoaded = false
             loadState = LoadState.Loading
             isModified = false
         }

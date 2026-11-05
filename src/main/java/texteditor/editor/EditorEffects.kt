@@ -4,18 +4,13 @@ import android.graphics.Typeface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.withFrameNanos
 import io.github.rosemoe.sora.event.ScrollEvent
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
 import io.github.rosemoe.sora.widget.CodeEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import texteditor.LoadState
 import texteditor.SoraEditorViewModel
-import kotlin.time.Duration.Companion.milliseconds
-
-private const val REVEAL_TIMEOUT_MS = 3_000L
 
 @Composable
 internal fun EditorEffects(
@@ -37,14 +32,6 @@ internal fun EditorEffects(
         if (editor.editorLanguage !== activeLanguage) {
             editor.setEditorLanguage(activeLanguage)
         }
-        if (activeLanguage != null && editor.styles == null) {
-            withTimeoutOrNull(REVEAL_TIMEOUT_MS.milliseconds) {
-                while (editor.styles == null) {
-                    withFrameNanos { }
-                }
-            }
-        }
-        viewModel.onLanguagesLoaded()
     }
     LaunchedEffect(editorRef, viewModel.grammarEpoch) {
         if (viewModel.grammarEpoch == 0) return@LaunchedEffect
