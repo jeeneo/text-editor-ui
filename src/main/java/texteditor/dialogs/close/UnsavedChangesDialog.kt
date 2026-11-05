@@ -20,7 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +51,7 @@ fun UnsavedChangesDialog(
                 style = MaterialTheme.typography.bodyMedium,
             )
 
-            TextButton(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
                 Icon(
                     imageVector = Icons.Filled.Save,
                     contentDescription = "",
@@ -62,7 +62,7 @@ fun UnsavedChangesDialog(
                 Text("Save", fontWeight = FontWeight.Medium, fontSize = 15.sp)
             }
 
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Icon(
                     imageVector = Icons.Filled.Edit,
                     contentDescription = "",
@@ -73,7 +73,7 @@ fun UnsavedChangesDialog(
                 Text("Keep editing", fontWeight = FontWeight.Medium, fontSize = 15.sp)
             }
 
-            TextButton(onClick = onMinimize, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onMinimize, modifier = Modifier.fillMaxWidth()) {
                 Icon(
                     imageVector = Icons.Filled.TransitEnterexit,
                     contentDescription = "",
@@ -84,11 +84,12 @@ fun UnsavedChangesDialog(
                 Text("Minimize", fontWeight = FontWeight.Medium, fontSize = 15.sp)
             }
 
-            TextButton(
+            Button(
                 onClick = onDiscard,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
                 ),
             ) {
                 Icon(

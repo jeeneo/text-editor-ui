@@ -411,6 +411,7 @@ fun TextEditorScreen(
                         scope.launch { drawerState.close() }
                         viewModel.open(path, fileNameOf(path))
                     },
+                    onUnpin = viewModel::unpin,
                     onClose = { id -> closeDocument(id) },
                     onMinimize = ::minimize,
                     width = 270.dp,
@@ -465,7 +466,7 @@ fun TextEditorScreen(
                         .padding(paddingValues)
                         .fillMaxSize(),
                 ) {
-                    if (viewModel.isLoading) {
+                    if (viewModel.isLoading || viewModel.isSaving) {
                         EditorLoadingIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -507,7 +508,7 @@ fun TextEditorScreen(
                                             val to = documents.indexOfFirst {
                                                 it.id == targetState
                                             }
-                                            val direction = if (from in 0..to) 1 else -1
+                                            val direction = if (from in 0..to) -1 else 1
                                             slideInHorizontally(tween(240)) { width ->
                                                 direction * width
                                             } togetherWith slideOutHorizontally(

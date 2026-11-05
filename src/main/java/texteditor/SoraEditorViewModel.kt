@@ -204,6 +204,10 @@ class SoraEditorViewModel(
         private set
     val isLoading: Boolean
         get() = loadState is LoadState.Loading || !languagesLoaded
+
+    /** True while a write is in flight, which can take a while on slow storage. */
+    var isSaving: Boolean by mutableStateOf(false)
+        private set
     var grammarEpoch: Int by mutableIntStateOf(0)
         private set
     var reloadEpoch: Int by mutableIntStateOf(0)
@@ -462,7 +466,6 @@ class SoraEditorViewModel(
                 withContext(Dispatchers.IO) { ThemeRegistry.initialize(getApplication()) }
             }
             loadPrefs()
-            validatePinnedPaths()
             refreshFontOptions()
         }
         grammarsLoaded()
@@ -613,20 +616,6 @@ class SoraEditorViewModel(
         }.getOrDefault(emptyList())
     }
 
-    private suspend fun validatePinnedPaths() {
-        if (pinnedPaths.isEmpty()) return
-        val pinned = pinnedPaths
-        val existing = withContext(Dispatchers.IO) {
-            pinned.filterTo(mutableSetOf()) {
-                runCatching { host.openRead(it).close() }.isSuccess
-            }
-        }
-        if (existing != pinned.toSet()) {
-            pinnedPaths = pinnedPaths.filter { it in existing }
-            savePrefs()
-        }
-    }
-
     fun refreshFontOptions() {
         viewModelScope.launch(Dispatchers.IO) {
             fontOptions = FontRegistry.availableFonts(getApplication(), includeSystemFonts = false)
@@ -723,6 +712,12 @@ class SoraEditorViewModel(
             return
         }
         pinnedPaths = if (path in pinnedPaths) pinnedPaths - path else pinnedPaths + path
+        savePrefs()
+    }
+
+    fun unpin(path: String) {
+        if (path !in pinnedPaths) return
+        pinnedPaths = pinnedPaths - path
         savePrefs()
     }
 
@@ -990,6 +985,7 @@ class SoraEditorViewModel(
         }
         if (session.isSaving) return
         session.isSaving = true
+        isSaving = true
         val readText: () -> String = if (activeDocumentId == id && getText != null) {
             getText
         } else {
@@ -1031,6 +1027,7 @@ class SoraEditorViewModel(
                 onError(e.localizedMessage ?: "Write error")
             } finally {
                 session.isSaving = false
+                isSaving = false
             }
         }
     }

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,6 +52,7 @@ fun EditorDrawerSheet(
     activeDocumentId: Long,
     onSelect: (Long) -> Unit,
     onOpenPath: (String) -> Unit,
+    onUnpin: (String) -> Unit,
     onClose: (Long) -> Unit,
     onMinimize: () -> Unit,
     width: Dp = DrawerDefaults.MaximumDrawerWidth,
@@ -112,10 +112,10 @@ fun EditorDrawerSheet(
                                     isModified = false,
                                 ),
                                 selected = open != null && open.id == activeDocumentId,
-                                pinned = true,
                                 onSelect = {
                                     if (open != null) onSelect(open.id) else onOpenPath(path)
                                 },
+                                onUnpin = { onUnpin(path) },
                                 onClose = open?.let { document -> { onClose(document.id) } },
                             )
                         }
@@ -129,7 +129,6 @@ fun EditorDrawerSheet(
                         DocumentRow(
                             document = document,
                             selected = document.id == activeDocumentId,
-                            pinned = false,
                             onSelect = { onSelect(document.id) },
                             onClose = { onClose(document.id) },
                         )
@@ -173,8 +172,8 @@ private fun SectionLabel(text: String) {
 private fun DocumentRow(
     document: OpenDocument,
     selected: Boolean,
-    pinned: Boolean,
     onSelect: () -> Unit,
+    onUnpin: (() -> Unit)? = null,
     onClose: (() -> Unit)?,
 ) {
     val name = document.name ?: document.path?.let(::fileNameOf) ?: "New file"
@@ -218,16 +217,6 @@ private fun DocumentRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (pinned) {
-            Icon(
-                painter = painterResource(R.drawable.icon_addpin),
-                contentDescription = "Pinned",
-                tint = contentColor.copy(alpha = 0.4f),
-                modifier = Modifier
-                    .padding(end = 8.dp)
-                    .size(18.dp),
             )
         }
         if (onClose != null) {
