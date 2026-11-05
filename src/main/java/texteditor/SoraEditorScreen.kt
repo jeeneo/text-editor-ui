@@ -5,6 +5,7 @@ package texteditor
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -16,15 +17,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -59,6 +66,7 @@ import texteditor.editor.EditorEffects
 import texteditor.editor.EditorSettings
 import texteditor.editor.createCodeEditor
 import texteditor.editor.linesToScan
+import texteditor.ui.bars.bottombar.BarColor
 import texteditor.ui.bars.bottombar.CustomSearchBar
 import texteditor.ui.bars.bottombar.SymbolInputBar
 import texteditor.ui.bars.topbar.TopBarActions
@@ -70,6 +78,11 @@ import texteditor.ui.screens.settings.EditorSettingsScreen
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val HIGHLIGHT_MAX_CHARS = 10_000_000
+
+// The bottom inset shared by the bottom bars, so it never moves from one bar to another.
+@Composable
+private fun bottomBarInsets(): WindowInsets =
+    WindowInsets.navigationBars.only(WindowInsetsSides.Bottom).exclude(WindowInsets.ime)
 
 @Composable
 fun TextEditorScreen(
@@ -271,8 +284,9 @@ fun TextEditorScreen(
     }
     val shouldFocusEditor =
         editorReadyId == viewModel.activeDocumentId && drawerState.currentValue == DrawerValue.Closed && !showSearchPanel && !showSettings && viewModel.preview == null && searchQuery == null
-    LaunchedEffect(editorRef, shouldFocusEditor) {
-        if (!shouldFocusEditor) return@LaunchedEffect
+    val isAutofocusEnabled = viewModel.isAutofocusEnabled && shouldFocusEditor
+    LaunchedEffect(editorRef, isAutofocusEnabled) {
+        if (!isAutofocusEnabled) return@LaunchedEffect
         val editor = editorRef ?: return@LaunchedEffect
         fun focus() {
             focusManager.clearFocus(force = true)
@@ -549,39 +563,66 @@ fun TextEditorScreen(
                             }
                         }
                     }
-                    AnimatedVisibility(
-                        visible = (viewModel.symbolBar && layoutReady && !viewModel.readOnly && !noDocuments),
-                        enter = expandVertically(
-                            animationSpec = tween(durationMillis = 220),
-                            expandFrom = Alignment.Bottom,
-                        ),
-                        exit = shrinkVertically(
-                            animationSpec = tween(durationMillis = 220),
-                            shrinkTowards = Alignment.Bottom,
-                        ),
+                    val symbolBarVisible =
+                        viewModel.symbolBar && layoutReady && !viewModel.readOnly && !noDocuments
+                    val searchBarVisible = showSearchPanel && layoutReady && !viewModel.readOnly
+                    val symbolBarState = remember { MutableTransitionState(false) }
+                    symbolBarState.targetState = symbolBarVisible
+                    val searchBarState = remember { MutableTransitionState(false) }
+                    searchBarState.targetState = searchBarVisible
+                    val bottomBarsPresent =
+                        symbolBarState.currentState || symbolBarState.targetState || searchBarState.currentState || searchBarState.targetState
+                    val bottomInsets = bottomBarInsets()
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = BarColor,
+                        tonalElevation = 2.dp,
                     ) {
-                        SymbolInputBar(
-                            editor = editorRef,
-                            typeface = typefaceToLoad,
-                            applyNavigationBarPadding = !showSearchPanel,
-                        )
-                    }
-                    AnimatedVisibility(
-                        visible = (showSearchPanel && layoutReady && !viewModel.readOnly),
-                        enter = expandVertically(
-                            animationSpec = tween(durationMillis = 220),
-                            expandFrom = Alignment.Top,
-                        ),
-                        exit = shrinkVertically(
-                            animationSpec = tween(durationMillis = 220),
-                            shrinkTowards = Alignment.Top,
-                        ),
-                    ) {
-                        CustomSearchBar(
-                            editor = editorRef,
-                            initialQuery = searchQuery,
-                            onClose = ::closeSearch,
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (bottomBarsPresent) {
+                                        Modifier.windowInsetsPadding(bottomInsets)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                        ) {
+                            AnimatedVisibility(
+                                visibleState = symbolBarState,
+                                enter = expandVertically(
+                                    animationSpec = tween(durationMillis = 220),
+                                    expandFrom = Alignment.Bottom,
+                                ),
+                                exit = shrinkVertically(
+                                    animationSpec = tween(durationMillis = 220),
+                                    shrinkTowards = Alignment.Bottom,
+                                ),
+                            ) {
+                                SymbolInputBar(
+                                    editor = editorRef,
+                                    typeface = typefaceToLoad,
+                                )
+                            }
+                            AnimatedVisibility(
+                                visibleState = searchBarState,
+                                enter = expandVertically(
+                                    animationSpec = tween(durationMillis = 220),
+                                    expandFrom = Alignment.Top,
+                                ),
+                                exit = shrinkVertically(
+                                    animationSpec = tween(durationMillis = 220),
+                                    shrinkTowards = Alignment.Top,
+                                ),
+                            ) {
+                                CustomSearchBar(
+                                    editor = editorRef,
+                                    initialQuery = searchQuery,
+                                    onClose = ::closeSearch,
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -212,6 +212,8 @@ class SoraEditorViewModel(
         private set
     var autoCompletion: Boolean by mutableStateOf(EditorDefaults.AUTO_COMPLETION)
         private set
+    var isAutofocusEnabled: Boolean by mutableStateOf(false)
+        private set
     var content: Content by mutableStateOf(Content())
         private set
 
@@ -529,6 +531,7 @@ class SoraEditorViewModel(
         pinnedPaths = snapshot.pinnedPaths
         selectedTheme = snapshot.selectedTheme
         selectedFont = snapshot.selectedFont
+        isAutofocusEnabled = snapshot.isAutofocusEnabled
         prefsLoaded = true
         savePrefs()
     }
@@ -552,6 +555,7 @@ class SoraEditorViewModel(
                 pinnedPaths = pinnedPaths,
                 selectedTheme = selectedTheme,
                 selectedFont = selectedFont,
+                isAutofocusEnabled = isAutofocusEnabled,
             )
         )
     }
@@ -650,10 +654,10 @@ class SoraEditorViewModel(
         savePrefs()
     }
 
-//    fun load(path: String) {
-//        val session = activeSession ?: return
-//        loadInto(session, path)
-//    }
+    fun toggleAutofocus() {
+        isAutofocusEnabled = !isAutofocusEnabled
+        savePrefs()
+    }
 
     private fun loadInto(
         session: DocumentSession,

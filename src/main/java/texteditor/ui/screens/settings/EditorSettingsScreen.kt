@@ -121,6 +121,15 @@ fun EditorSettingsScreen(
                     HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
                     SectionHeader("Editor")
                     SettingsRow(
+                        label = "Autofocus editor",
+                        description = "Focus the editor automatically",
+                        onClick = { viewModel.toggleAutofocus() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.isAutofocusEnabled, onCheckedChange = null
+                            )
+                        })
+                    SettingsRow(
                         label = "Syntax highlighting",
                         description = "Show language colors",
                         onClick = { viewModel.toggleSyntaxHighlight() },

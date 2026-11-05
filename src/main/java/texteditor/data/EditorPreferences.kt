@@ -30,6 +30,7 @@ internal object PrefKeys {
     const val DEFAULT_LINE_ENDING = "default_line_ending"
     const val DETECT_ENCODING = "detect_encoding"
     const val PINNED_FILES = "pinned_files"
+    const val AUTO_FOCUS = "auto_focus_editor"
 }
 
 internal object EditorDefaults {
@@ -48,9 +49,9 @@ internal object EditorDefaults {
     const val DETECT_ENCODING = true
     const val SELECTED_THEME = "default"
     const val SELECTED_FONT = "fonts/CascadiaCode-Regular.ttf"
+    const val AUTO_FOCUS = true
 }
 
-/** Everything persisted by the editor, read and written as one snapshot. */
 @Immutable
 internal data class EditorPrefsSnapshot(
     val wordWrap: Boolean,
@@ -69,6 +70,7 @@ internal data class EditorPrefsSnapshot(
     val pinnedPaths: List<String>,
     val selectedTheme: String,
     val selectedFont: String,
+    val isAutofocusEnabled: Boolean,
 )
 
 internal class EditorPreferences(private val context: Context) {
@@ -118,6 +120,7 @@ internal class EditorPreferences(private val context: Context) {
                     .map { it.id },
                 defaultName = EditorDefaults.SELECTED_FONT,
             ),
+            isAutofocusEnabled = prefs.getBoolean(PrefKeys.AUTO_FOCUS, EditorDefaults.AUTO_FOCUS),
         )
     }
 
@@ -139,6 +142,7 @@ internal class EditorPreferences(private val context: Context) {
             putString(PrefKeys.DEFAULT_LINE_ENDING, snapshot.defaultLineEnding.name)
             putBoolean(PrefKeys.DETECT_ENCODING, snapshot.detectEncoding)
             putString(PrefKeys.PINNED_FILES, JSONArray(snapshot.pinnedPaths).toString())
+            putBoolean(PrefKeys.AUTO_FOCUS, snapshot.isAutofocusEnabled)
         }
     }
 }

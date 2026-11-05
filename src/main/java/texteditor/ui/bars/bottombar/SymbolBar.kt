@@ -14,17 +14,10 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -109,7 +102,6 @@ private val SymbolEntries: List<SymbolEntry> = buildList {
 fun SymbolInputBar(
     editor: CodeEditor?,
     typeface: Typeface,
-    applyNavigationBarPadding: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val metrics = rememberBarMetrics()
@@ -134,22 +126,13 @@ fun SymbolInputBar(
     }
 
     val barHeight = metrics.restingHeight + metrics.travel * expansion
-    val contentInsets = if (applyNavigationBarPadding) {
-        WindowInsets.navigationBars.only(WindowInsetsSides.Bottom).exclude(WindowInsets.ime)
-    } else {
-        WindowInsets(0, 0, 0, 0)
-    }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
         tonalElevation = 2.dp,
         color = BarColor,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(contentInsets),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             HorizontalDivider(thickness = 0.4.dp)
             Box(
                 modifier = Modifier
