@@ -66,6 +66,8 @@ fun EditorDrawerSheet(
 ) {
     var closeMenuExpanded by remember { mutableStateOf(false) }
     var fileMenuExpanded by remember { mutableStateOf(false) }
+    val itemIconTint = contentColor.copy(alpha = 0.5f)
+
     ModalDrawerSheet(
         modifier = Modifier.requiredWidth(width),
         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -129,7 +131,7 @@ fun EditorDrawerSheet(
                             Icon(
                                 imageVector = Icons.Filled.Save,
                                 contentDescription = null,
-                                tint = contentColor.copy(alpha = 0.5f),
+                                tint = itemIconTint,
                             )
                         },
                         text = { Text("Save all") },
@@ -143,7 +145,7 @@ fun EditorDrawerSheet(
                             Icon(
                                 imageVector = Icons.Filled.Add,
                                 contentDescription = null,
-                                tint = contentColor.copy(alpha = 0.5f),
+                                tint = itemIconTint,
                             )
                         },
                         text = { Text("New file") },

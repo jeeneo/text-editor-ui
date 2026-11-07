@@ -94,7 +94,6 @@ fun TextEditorScreen(
     val focusManager = LocalFocusManager.current
     var editorRef by remember { mutableStateOf<CodeEditor?>(null) }
     var showSearchPanel by rememberSaveable { mutableStateOf(false) }
-    var showOverflowMenu by remember { mutableStateOf(false) }
     val canUndo = remember { mutableStateOf(false) }
     val canRedo = remember { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -442,8 +441,6 @@ fun TextEditorScreen(
                         canUndo = canUndo,
                         canRedo = canRedo,
                         refreshUndoRedo = ::refreshUndoRedo,
-                        showOverflowMenu = showOverflowMenu,
-                        onShowOverflowMenuChange = { showOverflowMenu = it },
                         showSearchPanel = showSearchPanel,
                         onShowSearchPanelChange = { showSearchPanel = it },
                         onShowSettingsChange = { showSettings = it },
