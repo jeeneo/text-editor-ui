@@ -31,6 +31,7 @@ internal object PrefKeys {
     const val DETECT_ENCODING = "detect_encoding"
     const val PINNED_FILES = "pinned_files"
     const val AUTO_FOCUS = "auto_focus_editor"
+    const val SHOW_DOC_TABS = "show_document_tabs"
 }
 
 internal object EditorDefaults {
@@ -50,6 +51,7 @@ internal object EditorDefaults {
     const val SELECTED_THEME = "default"
     const val SELECTED_FONT = "fonts/CascadiaCode-Regular.ttf"
     const val AUTO_FOCUS = true
+    const val SHOW_DOC_TABS = false
 }
 
 @Immutable
@@ -70,7 +72,8 @@ internal data class EditorPrefsSnapshot(
     val pinnedPaths: List<String>,
     val selectedTheme: String,
     val selectedFont: String,
-    val isAutofocusEnabled: Boolean,
+    val autoFocus: Boolean,
+    val documentTabs: Boolean,
 )
 
 internal class EditorPreferences(private val context: Context) {
@@ -87,27 +90,32 @@ internal class EditorPreferences(private val context: Context) {
         }.getOrDefault(LineEnding.LF)
         return EditorPrefsSnapshot(
             wordWrap = prefs.getBoolean(PrefKeys.WORD_WRAP, EditorDefaults.WORD_WRAP),
-            syntaxHighlight =
-                prefs.getBoolean(PrefKeys.SYNTAX_HIGHLIGHT, EditorDefaults.SYNTAX_HIGHLIGHT),
+            syntaxHighlight = prefs.getBoolean(
+                PrefKeys.SYNTAX_HIGHLIGHT, EditorDefaults.SYNTAX_HIGHLIGHT
+            ),
             textSizePx = prefs.getFloat(PrefKeys.TEXT_SIZE_PX, EditorDefaults.TEXT_SIZE_PX),
             miniMap = prefs.getBoolean(PrefKeys.MINIMAP_SHOWN, EditorDefaults.MINIMAP_SHOWN),
-            miniMapBlocks =
-                prefs.getBoolean(PrefKeys.MINIMAP_BLOCKS, EditorDefaults.MINIMAP_BLOCKS),
+            miniMapBlocks = prefs.getBoolean(
+                PrefKeys.MINIMAP_BLOCKS, EditorDefaults.MINIMAP_BLOCKS
+            ),
             symbolBar = prefs.getBoolean(PrefKeys.SYMBOL_BAR, EditorDefaults.SYMBOL_BAR),
             lineNumbers = prefs.getBoolean(PrefKeys.LINE_NUMBERS, EditorDefaults.LINE_NUMBERS),
-            invisibleChars =
-                prefs.getBoolean(PrefKeys.INVISIBLE_CHARS, EditorDefaults.INVISIBLE_CHARS),
+            invisibleChars = prefs.getBoolean(
+                PrefKeys.INVISIBLE_CHARS, EditorDefaults.INVISIBLE_CHARS
+            ),
             readOnly = prefs.getBoolean(PrefKeys.READ_ONLY, EditorDefaults.READ_ONLY),
-            autoCompletion =
-                prefs.getBoolean(PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION),
+            autoCompletion = prefs.getBoolean(
+                PrefKeys.AUTO_COMPLETION, EditorDefaults.AUTO_COMPLETION
+            ),
             defaultEncodingId = if (EncodingCatalog.byId(defaultEncodingId) == null) {
                 EditorDefaults.DEFAULT_ENCODING
             } else {
                 defaultEncodingId
             },
             defaultLineEnding = defaultLineEnding,
-            detectEncoding =
-                prefs.getBoolean(PrefKeys.DETECT_ENCODING, EditorDefaults.DETECT_ENCODING),
+            detectEncoding = prefs.getBoolean(
+                PrefKeys.DETECT_ENCODING, EditorDefaults.DETECT_ENCODING
+            ),
             pinnedPaths = parsePinnedPaths(prefs.getString(PrefKeys.PINNED_FILES, null)),
             selectedTheme = resolveSelectedId(
                 stored = prefs.getString(PrefKeys.SELECTED_THEME, null) ?: "",
@@ -120,7 +128,8 @@ internal class EditorPreferences(private val context: Context) {
                     .map { it.id },
                 defaultName = EditorDefaults.SELECTED_FONT,
             ),
-            isAutofocusEnabled = prefs.getBoolean(PrefKeys.AUTO_FOCUS, EditorDefaults.AUTO_FOCUS),
+            autoFocus = prefs.getBoolean(PrefKeys.AUTO_FOCUS, EditorDefaults.AUTO_FOCUS),
+            documentTabs = prefs.getBoolean(PrefKeys.SHOW_DOC_TABS, EditorDefaults.SHOW_DOC_TABS)
         )
     }
 
@@ -142,7 +151,8 @@ internal class EditorPreferences(private val context: Context) {
             putString(PrefKeys.DEFAULT_LINE_ENDING, snapshot.defaultLineEnding.name)
             putBoolean(PrefKeys.DETECT_ENCODING, snapshot.detectEncoding)
             putString(PrefKeys.PINNED_FILES, JSONArray(snapshot.pinnedPaths).toString())
-            putBoolean(PrefKeys.AUTO_FOCUS, snapshot.isAutofocusEnabled)
+            putBoolean(PrefKeys.AUTO_FOCUS, snapshot.autoFocus)
+            putBoolean(PrefKeys.SHOW_DOC_TABS, snapshot.documentTabs)
         }
     }
 }

@@ -129,7 +129,6 @@ class SoraEditorViewModel(
     private var saveCopyInProgress = false
     private var unencodableSessionId = 0L
     private var retrySave: (() -> Unit)? = null
-
     var beforeDocumentSwitch: (() -> Unit)? = null
     private val activeSession: DocumentSession?
         get() = DocumentSessions.active
@@ -211,7 +210,8 @@ class SoraEditorViewModel(
         private set
     var autoCompletion: Boolean by mutableStateOf(EditorDefaults.AUTO_COMPLETION)
         private set
-    var isAutofocusEnabled: Boolean by mutableStateOf(false)
+    var documentTabs: Boolean by mutableStateOf(EditorDefaults.SHOW_DOC_TABS)
+    var autoFocus: Boolean by mutableStateOf(false)
         private set
     var content: Content by mutableStateOf(Content())
         private set
@@ -514,7 +514,8 @@ class SoraEditorViewModel(
         pinnedPaths = snapshot.pinnedPaths
         selectedTheme = snapshot.selectedTheme
         selectedFont = snapshot.selectedFont
-        isAutofocusEnabled = snapshot.isAutofocusEnabled
+        autoFocus = snapshot.autoFocus
+        documentTabs = snapshot.documentTabs
         prefsLoaded = true
         savePrefs()
     }
@@ -538,7 +539,8 @@ class SoraEditorViewModel(
                 pinnedPaths = pinnedPaths,
                 selectedTheme = selectedTheme,
                 selectedFont = selectedFont,
-                isAutofocusEnabled = isAutofocusEnabled,
+                autoFocus = autoFocus,
+                documentTabs = documentTabs
             )
         )
     }
@@ -638,7 +640,12 @@ class SoraEditorViewModel(
     }
 
     fun toggleAutofocus() {
-        isAutofocusEnabled = !isAutofocusEnabled
+        autoFocus = !autoFocus
+        savePrefs()
+    }
+
+    fun toggleTabs() {
+        documentTabs = !documentTabs
         savePrefs()
     }
 

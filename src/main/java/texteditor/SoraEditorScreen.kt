@@ -282,7 +282,7 @@ fun TextEditorScreen(
     }
     val shouldFocusEditor =
         editorReadyId == viewModel.activeDocumentId && drawerState.currentValue == DrawerValue.Closed && !showSearchPanel && !showSettings && viewModel.preview == null && searchQuery == null
-    val isAutofocusEnabled = viewModel.isAutofocusEnabled && shouldFocusEditor
+    val isAutofocusEnabled = viewModel.autoFocus && shouldFocusEditor
     LaunchedEffect(editorRef, isAutofocusEnabled) {
         if (!isAutofocusEnabled) return@LaunchedEffect
         val editor = editorRef ?: return@LaunchedEffect
@@ -453,6 +453,13 @@ fun TextEditorScreen(
                             viewModel.requestClose(viewModel.activeDocumentId)
                         },
                         onShowLanguagePicker = { viewModel.openLanguageDialog(detectedScope) },
+                        documents = viewModel.openDocuments,
+                        activeDocumentId = viewModel.activeDocumentId,
+                        onSelectDocument = ::switchToDocument,
+                        onCloseDocument = { id ->
+                            leaveAfterClose = false
+                            viewModel.requestClose(id)
+                        },
                         noDocuments = noDocuments,
                     )
                 },
@@ -504,7 +511,7 @@ fun TextEditorScreen(
                                             val to = documents.indexOfFirst {
                                                 it.id == targetState
                                             }
-                                            val direction = if (from in 0..to) -1 else 1
+                                            val direction = if (from in 0..to) 1 else -1
                                             slideInHorizontally(tween(240)) { width ->
                                                 direction * width
                                             } togetherWith slideOutHorizontally(

@@ -126,7 +126,7 @@ fun EditorSettingsScreen(
                         onClick = { viewModel.toggleAutofocus() },
                         trailing = {
                             Switch(
-                                checked = viewModel.isAutofocusEnabled, onCheckedChange = null
+                                checked = viewModel.autoFocus, onCheckedChange = null
                             )
                         })
                     SettingsRow(
@@ -188,6 +188,15 @@ fun EditorSettingsScreen(
                             )
                         },
                     )
+                    SettingsRow(
+                        label = "Tabs",
+                        description = "Show tabs at the top for opened files",
+                        onClick = { viewModel.toggleTabs() },
+                        trailing = {
+                            Switch(
+                                checked = viewModel.documentTabs, onCheckedChange = null
+                            )
+                        })
                 }
                 SimpleShadow()
             }

@@ -5,12 +5,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -18,11 +22,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Menu
@@ -47,17 +58,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
+import texteditor.OpenDocument
 import texteditor.R
 import texteditor.SaveButtonState
 import texteditor.SoraEditorViewModel
 import texteditor.data.EditorLoadingIndicator
+import texteditor.fileNameOf
+import texteditor.ui.bars.bottombar.BarColor
 import ui.theme.AppTheme
 import kotlin.math.abs
 
@@ -85,6 +106,10 @@ fun TopBarActions(
     onOpenDrawer: () -> Unit = {},
     onCloseFile: () -> Unit = {},
     onShowLanguagePicker: () -> Unit = {},
+    documents: List<OpenDocument> = emptyList(),
+    activeDocumentId: Long = 0L,
+    onSelectDocument: (Long) -> Unit = {},
+    onCloseDocument: (Long) -> Unit = {},
     noDocuments: Boolean = false,
 ) {
     var fileMenuExpanded by remember { mutableStateOf(false) }
@@ -249,6 +274,16 @@ fun TopBarActions(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     HorizontalDivider(thickness = 0.4.dp, color = DividerDefaults.color.copy(0.8f))
+
+                    if (documents.isNotEmpty() && viewModel?.documentTabs == true) {
+                        DocumentTabs(
+                            documents = documents,
+                            activeDocumentId = activeDocumentId,
+                            onSelect = onSelectDocument,
+                            onClose = onCloseDocument,
+                        )
+                    }
+
                     val alpha = if (viewModel?.isModified ?: false) 0.9f else 0.7f
                     Row(
                         modifier = Modifier
@@ -344,7 +379,15 @@ fun TsPreview() {
                     .background(MaterialTheme.colorScheme.background),
                 contentAlignment = Alignment.Center
             ) {
-                TopBarActions()
+                TopBarActions(
+                    title = "Main.kt",
+                    documents = listOf(
+                        OpenDocument(1L, "/src/Main.kt", "Main.kt", null, false),
+                        OpenDocument(2L, "/src/Theme.kt", "Theme.kt", null, true),
+                        OpenDocument(3L, null, null, null, false),
+                    ),
+                    activeDocumentId = 1L,
+                )
             }
         }
     }
