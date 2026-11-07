@@ -62,6 +62,8 @@ fun EditorDrawerSheet(
     onSaveAll: () -> Unit,
     onClose: (Long) -> Unit,
     onMinimize: () -> Unit,
+    onCloseOthers: () -> Unit = {},
+    onCloseAll: () -> Unit = {},
     width: Dp = DrawerDefaults.MaximumDrawerWidth,
 ) {
     var closeMenuExpanded by remember { mutableStateOf(false) }
@@ -98,11 +100,17 @@ fun EditorDrawerSheet(
                 ) {
                     DropdownMenuItem(
                         text = { Text("Close others") },
-                        onClick = { closeMenuExpanded = false },
+                        onClick = {
+                            closeMenuExpanded = false
+                            onCloseOthers()
+                        },
                     )
                     DropdownMenuItem(
                         text = { Text("Close all") },
-                        onClick = { closeMenuExpanded = false },
+                        onClick = {
+                            closeMenuExpanded = false
+                            onCloseAll()
+                        },
                     )
                     DropdownMenuItem(
                         text = { Text("Close unmodified") },

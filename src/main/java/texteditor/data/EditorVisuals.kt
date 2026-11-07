@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
+import androidx.compose.material.icons.filled.DriveFileMoveRtl
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -44,9 +45,9 @@ internal fun EmptyEditor(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Outlined.InsertDriveFile,
+            imageVector = Icons.Filled.DriveFileMoveRtl,
             contentDescription = null,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(54.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
         )
         Spacer(Modifier.height(12.dp))

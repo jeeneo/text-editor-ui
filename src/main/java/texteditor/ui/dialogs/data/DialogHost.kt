@@ -24,6 +24,7 @@ fun DialogHost(
     onSaveAndClose: (Long) -> Unit,
     onMinimize: () -> Unit,
     onDocumentClosed: () -> Unit,
+    onCloseCancelled: () -> Unit,
     onJumpToLine: (Int) -> Unit,
 ) {
     val controller = viewModel.dialogs
@@ -77,9 +78,13 @@ fun DialogHost(
             },
             onMinimize = {
                 controller.dismissTop()
+                onCloseCancelled()
                 onMinimize()
             },
-            onDismiss = controller::dismissTop,
+            onDismiss = {
+                controller.dismissTop()
+                onCloseCancelled()
+            },
         )
 
         is DialogRequest.Reload -> ReloadFileDialog(
@@ -137,7 +142,10 @@ fun DialogHost(
         is DialogRequest.UnrepresentableCharacters -> UnrepresentableCharactersDialog(
             encodingLabel = request.encodingLabel,
             onSaveAsUtf8 = viewModel::saveAsUtf8,
-            onDismiss = viewModel::cancelUnencodableSave,
+            onDismiss = {
+                viewModel.cancelUnencodableSave()
+                onCloseCancelled()
+            },
         )
     }
 }

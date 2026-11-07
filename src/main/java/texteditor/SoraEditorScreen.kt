@@ -14,6 +14,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -40,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -116,6 +119,7 @@ fun TextEditorScreen(
     val noDocuments = viewModel.openDocuments.isEmpty() && !leaving
 
     var leaveAfterClose by remember { mutableStateOf(false) }
+    val pendingCloseIds = remember { mutableStateListOf<Long>() }
 
     LaunchedEffect(saveButtonState.value) {
         if (saveButtonState.value == SaveButtonState.SAVED) {
@@ -132,7 +136,11 @@ fun TextEditorScreen(
         }
     }
 
-    fun currentText(): String = editorRef?.text?.toString() ?: viewModel.content.toString()
+    fun currentText(): String = if (editorReadyId == viewModel.activeDocumentId) {
+        editorRef?.text?.toString() ?: viewModel.content.toString()
+    } else {
+        viewModel.content.toString()
+    }
 
     fun refreshUndoRedo() {
         canUndo.value = editorRef?.canUndo() ?: false
@@ -168,14 +176,17 @@ fun TextEditorScreen(
         onNavigateUp()
     }
 
-    fun saveDocument(id: Long, onSaved: () -> Unit) {
+    fun saveDocument(id: Long, onSaved: () -> Unit, onSaveError: () -> Unit = {}) {
         viewModel.save(
             getText = ::currentText,
             onSuccess = {
                 saveButtonState.value = SaveButtonState.SAVED
                 onSaved()
             },
-            onError = ::reportSaveError,
+            onError = { message ->
+                reportSaveError(message)
+                onSaveError()
+            },
             id = id,
         )
     }
@@ -183,6 +194,25 @@ fun TextEditorScreen(
     fun switchToDocument(id: Long) {
         if (id == viewModel.activeDocumentId) return
         viewModel.activate(id)
+    }
+
+    fun advanceCloseQueue() {
+        while (pendingCloseIds.isNotEmpty()) {
+            val id = pendingCloseIds.removeAt(0)
+            val document = viewModel.openDocuments.firstOrNull { it.id == id } ?: continue
+            if (document.isModified) {
+                viewModel.requestClose(id)
+                return
+            }
+            viewModel.close(id)
+        }
+    }
+
+    fun closeDocuments(ids: List<Long>) {
+        leaveAfterClose = false
+        pendingCloseIds.clear()
+        pendingCloseIds.addAll(ids)
+        advanceCloseQueue()
     }
 
     fun saveAllDocuments() {
@@ -349,12 +379,31 @@ fun TextEditorScreen(
     DialogHost(
         viewModel = viewModel,
         onSaveAndClose = { id ->
-            saveDocument(id) {
-                if (leaveAfterClose) leaveEditor() else viewModel.close(id)
-            }
+            saveDocument(
+                id = id,
+                onSaved = {
+                    if (leaveAfterClose) {
+                        leaveEditor()
+                    } else {
+                        viewModel.close(id)
+                        advanceCloseQueue()
+                    }
+                },
+                onSaveError = {
+                    leaveAfterClose = false
+                    pendingCloseIds.clear()
+                },
+            )
         },
         onMinimize = ::minimize,
-        onDocumentClosed = { if (leaveAfterClose) leaveEditor() },
+        onDocumentClosed = {
+            if (leaveAfterClose) leaveEditor()
+            advanceCloseQueue()
+        },
+        onCloseCancelled = {
+            leaveAfterClose = false
+            pendingCloseIds.clear()
+        },
         onJumpToLine = { line ->
             val editor = editorRef
             if (editor != null) {
@@ -406,6 +455,17 @@ fun TextEditorScreen(
                         scope.launch { drawerState.close() }
                         saveAllDocuments()
                     },
+                    onCloseOthers = {
+                        val activeId = viewModel.activeDocumentId
+                        val ids = viewModel.openDocuments.map { it.id }.filter { it != activeId }
+                        scope.launch { drawerState.close() }
+                        closeDocuments(ids)
+                    },
+                    onCloseAll = {
+                        val ids = viewModel.openDocuments.map { it.id }
+                        scope.launch { drawerState.close() }
+                        closeDocuments(ids)
+                    },
                     onClose = { id ->
                         leaveAfterClose = false
                         viewModel.requestClose(id)
@@ -428,7 +488,9 @@ fun TextEditorScreen(
                         editorRef = editorRef,
                         viewModel = viewModel,
                         saveButtonState = saveButtonState,
-                        onSave = { saveDocument(viewModel.activeDocumentId) {} },
+                        onSave = {
+                            saveDocument(viewModel.activeDocumentId, onSaved = {})
+                        },
                         onSaveAs = ::saveCopyAsFile,
                         onReload = { viewModel.openReloadDialog() },
                         onFileInfo = {
@@ -476,6 +538,10 @@ fun TextEditorScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { viewModel.openNewFile() })
                             )
                         }
 
@@ -559,7 +625,8 @@ fun TextEditorScreen(
                     }
                     val symbolBarVisible =
                         viewModel.symbolBar && viewModel.editorLaidOut && !viewModel.readOnly && !noDocuments
-                    val searchBarVisible = showSearchPanel && viewModel.editorLaidOut && !viewModel.readOnly
+                    val searchBarVisible =
+                        showSearchPanel && viewModel.editorLaidOut && !viewModel.readOnly
                     val symbolBarState = remember { MutableTransitionState(false) }
                     symbolBarState.targetState = symbolBarVisible
                     val searchBarState = remember { MutableTransitionState(false) }
