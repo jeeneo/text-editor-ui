@@ -36,7 +36,6 @@ import androidx.compose.ui.window.PopupProperties
 import io.github.rosemoe.sora.widget.CodeEditor
 import texteditor.R
 import texteditor.data.AppToasts
-import kotlin.text.iterator
 
 @Composable
 fun EditDropdownMenu(
@@ -52,7 +51,7 @@ fun EditDropdownMenu(
         expanded = expanded,
         containerColor = MaterialTheme.colorScheme.onSecondary,
         properties = PopupProperties(
-            focusable = false, dismissOnBackPress = false
+            focusable = false
         ),
         onDismissRequest = onDismiss
     ) {

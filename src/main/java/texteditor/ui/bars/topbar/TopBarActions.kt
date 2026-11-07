@@ -22,31 +22,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
-import androidx.compose.material.icons.automirrored.outlined.ShortText
-import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItemDefaults.contentColor
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -63,13 +47,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.PopupProperties
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
 import texteditor.R
@@ -107,12 +89,7 @@ fun TopBarActions(
 ) {
     var fileMenuExpanded by remember { mutableStateOf(false) }
     var editMenuExpanded by remember { mutableStateOf(false) }
-    var actionsMenuExpanded by remember { mutableStateOf(false) }
-    fun showPosition(offset: Int) {
-        val editor = editorRef ?: return
-        val position = editor.text.indexer.getCharPosition(offset.coerceIn(0, editor.text.length))
-        editor.setSelection(position.line, position.column, true)
-    }
+
     val positionHistory = remember(editorRef) { mutableStateListOf<Int>() }
     var positionIndex by remember(editorRef) { mutableIntStateOf(-1) }
     LaunchedEffect(editorRef, cursorLine) {
@@ -240,188 +217,23 @@ fun TopBarActions(
                     )
                 }
 
-                val itemTextColor = contentColor.copy(alpha = 0.8f)
-                val itemIconTint = contentColor.copy(alpha = 0.5f)
-                val isReadOnly = viewModel?.readOnly == true
-
-                IconButton(onClick = { actionsMenuExpanded = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                    DropdownMenu(
-                        containerColor = MaterialTheme.colorScheme.onSecondary,
-                        expanded = actionsMenuExpanded,
-                        onDismissRequest = { actionsMenuExpanded = false },
-                        properties = PopupProperties(focusable = false, dismissOnBackPress = false),
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("File", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.InsertDriveFile,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropUp,
-                                    contentDescription = null,
-                                    modifier = Modifier.rotate(90f),
-                                    tint = itemIconTint,
-                                )
-                            },
-                            onClick = { fileMenuExpanded = true },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Search", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Search,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            enabled = !isReadOnly,
-                            onClick = { onShowSearchPanelChange(!showSearchPanel) },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Preview", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Language,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            onClick = {
-                                onPreview()
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Syntax", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Code,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            onClick = {
-                                onShowLanguagePicker()
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Previous position", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowBack,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            enabled = positionIndex > 0,
-                            onClick = {
-                                if (positionIndex > 0) {
-                                    positionIndex--
-                                    showPosition(positionHistory[positionIndex])
-                                }
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Next position", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowForward,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            enabled = positionIndex < positionHistory.lastIndex,
-                            onClick = {
-                                if (positionIndex < positionHistory.lastIndex) {
-                                    positionIndex++
-                                    showPosition(positionHistory[positionIndex])
-                                }
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Jump to line", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ShortText,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            onClick = {
-                                viewModel?.openJumpToLineDialog(cursorLine, lineCount)
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Word wrap", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ShortText,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            trailingIcon = {
-                                Checkbox(
-                                    checked = viewModel?.wordWrap == true,
-                                    onCheckedChange = null
-                                )
-                            },
-                            onClick = { viewModel?.toggleWordWrap() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Read-only mode", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.RemoveRedEye,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            trailingIcon = {
-                                Checkbox(checked = isReadOnly, onCheckedChange = null)
-                            },
-                            onClick = { viewModel?.toggleReadOnly() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Filled.Settings,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            onClick = {
-                                onShowSettingsChange(true)
-                                actionsMenuExpanded = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Close file", color = itemTextColor) },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.Close,
-                                    contentDescription = null,
-                                    tint = itemIconTint
-                                )
-                            },
-                            onClick = {
-                                if (isPinned) viewModel.togglePin()
-                                onCloseFile()
-                            },
-                        )
-                    }
-                }
+                EditorActions(
+                    viewModel = viewModel,
+                    editorRef = editorRef,
+                    cursorLine = cursorLine,
+                    lineCount = lineCount,
+                    positionHistory = positionHistory,
+                    positionIndex = positionIndex,
+                    onPositionIndexChange = { positionIndex = it },
+                    showSearchPanel = showSearchPanel,
+                    onShowSearchPanelChange = onShowSearchPanelChange,
+                    onPreview = onPreview,
+                    onShowLanguagePicker = onShowLanguagePicker,
+                    onShowSettingsChange = onShowSettingsChange,
+                    onCloseFile = onCloseFile,
+                    isPinned = isPinned,
+                    onShowFileMenu = { fileMenuExpanded = true },
+                )
 
                 FileActionsMenu(
                     viewModel = viewModel,

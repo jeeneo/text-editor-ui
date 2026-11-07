@@ -39,7 +39,7 @@ fun FileActionsMenu(
         expanded = expanded,
         containerColor = MaterialTheme.colorScheme.onSecondary,
         properties = PopupProperties(
-            focusable = false, dismissOnBackPress = false
+            focusable = false
         ),
         onDismissRequest = onDismiss
     ) {
